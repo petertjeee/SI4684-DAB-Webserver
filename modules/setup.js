@@ -6,7 +6,7 @@ const path = require('path')
 
 const crypto = require('crypto')
 
-const CONFIG_PATH = path.join(__dirname, 'config.json')
+const CONFIG_PATH = path.join(__dirname, '../config.json')
 
 // ===== AUTH =====
 const activeSessions = new Map()

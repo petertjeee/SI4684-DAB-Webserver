@@ -1,6 +1,6 @@
 {
   "serial": {
-    "port": "/dev/ttyUSB0",
+    "port": "0",
     "baudRate": 1000000
   },
   "audio": {
@@ -13,6 +13,9 @@
     "port": 3000
   },
   "scan": {
-    "autoScanOnStart": true
+    "autoScanOnStart": false
+  },
+  "auth": {
+    "password": ""
   }
 }

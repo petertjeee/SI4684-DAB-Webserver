@@ -6,8 +6,11 @@
   --bg3:       #111d28;
   --border:    rgba(0,210,255,0.12);
   --accent:    #00d2ff;
+/*--accent: #C99536;*/
   --accent2:   #00ff88;
+/*--accent2: #C99536;*/
   --accent3:   #ff6b35;
+/*--accent3: #C99536;*/
   --text:      #c9d1d9;
   --text-dim:  #FFFFFF;
   --text-bright: #e6edf3;
@@ -325,6 +328,7 @@ body::before {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  width: 238px;
 }
 
 .station-ensemble {

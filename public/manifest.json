@@ -1,0 +1,22 @@
+{
+  "name": "DAB Radio",
+  "short_name": "DAB Radio",
+  "description": "DAB+ Receiver Web Interface",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080e14",
+  "theme_color": "#00d2ff",
+  "icons": [
+    {
+      "src": "/images/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/images/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
+

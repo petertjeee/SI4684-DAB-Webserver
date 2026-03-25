@@ -3,7 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
   <title>Si4684 DAB Webserver</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="DAB Radio">
+  <meta name="theme-color" content="#00d2ff">
+
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -129,7 +136,7 @@
         </div>
         <!-- COL 2: Slideshow -->
         <div style="flex-shrink:0;">
-          <img id="slideshow" src="" alt="" onclick="expandSlideshow()" style="height:150px; object-fit:cover; border-radius:8px; cursor:pointer; box-shadow:0 0 10px rgba(0,210,255,0.2); display:block;">
+          <img id="slideshow" src="" alt="" onclick="expandSlideshow()" style="width:200px; height:150px; object-fit:cover; border-radius:8px; cursor:pointer; box-shadow:0 0 10px rgba(0,210,255,0.2); display:block;">
         </div>
       </div>
       <!-- ROW 2: Radio Text -->
