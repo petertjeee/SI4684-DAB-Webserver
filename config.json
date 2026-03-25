@@ -1,6 +1,6 @@
 {
   "serial": {
-    "port": "0",
+    "port": "",
     "baudRate": 1000000
   },
   "audio": {
@@ -13,7 +13,7 @@
     "port": 3000
   },
   "scan": {
-    "autoScanOnStart": false
+    "autoScanOnStart": true
   },
   "auth": {
     "password": ""
