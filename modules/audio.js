@@ -9,6 +9,10 @@ audioEmitter.setMaxListeners(50)
 let audioRunning = false
 
 function startAudio() {
+  if (!config.audio.device) {
+    warn('Audio device not configured, skipping. Use /setup to configure.')
+    return
+  }
   if (audioRunning) return
   audioRunning = true
 
