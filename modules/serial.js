@@ -32,6 +32,10 @@ function resetMuxState() {
 }
 
 function initSerial() {
+  if (!config.serial.port) {
+    warn('Serial port not configured, skipping. Use /setup to configure.')
+    return null
+  }
   port = new SerialPort({
     path: config.serial.port,
     baudRate: config.serial.baudRate
