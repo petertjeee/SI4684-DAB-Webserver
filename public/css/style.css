@@ -138,6 +138,14 @@ h2 {
 /* ===== STATION / PLAYER ===== */
 .station-panel { min-height: 130px; }
 
+.station-split {
+  display: flex;
+  gap: 18px;
+  align-items: stretch;
+}
+
+.panel-main { flex: 1; min-width: 0; }
+
 .station-flex {
   display: flex;
   gap: 18px;
@@ -293,9 +301,43 @@ h2 {
 /* ===== VU / PPM METERS (audio-monitor style) ===== */
 .vu-block {
   position: relative; flex-shrink: 0;
-  display: flex; flex-direction: column;
+  display: flex; flex-direction: column; align-items: center;
+  border-left: 1px solid var(--color-2);
+  padding-left: 14px;
+  width: 132px;
 }
+.vu-head { text-align: right; margin-bottom: 3px; }
+.vu-mode-opt {
+  display: inline-block; font-size: 9px; letter-spacing: 1px;
+  color: var(--text-3); cursor: pointer; padding: 2px 7px;
+  border-radius: 8px; text-transform: uppercase;
+}
+.vu-mode-opt.active { background: var(--color-3); color: var(--color-main-bright); }
+.vu-mode-opt:hover { color: var(--color-main-bright); }
 .vu-meters { display: flex; justify-content: center; gap: 6px; flex: 1; }
+.lufs-box {
+  flex: 1; display: flex; flex-direction: column;
+}
+.lufs-cols {
+  flex: 1; display: flex; justify-content: center; gap: 6px;
+}
+.lufs-box .vmeter {
+  width: 30px;
+  background: linear-gradient(0deg, #58dbab 0%, #58dbab 54%,
+    #ffb74d 54%, #ffb74d 80%, #e53935 80%, #e53935 100%);
+}
+.lufs-box .vpk {
+  height: 3px;
+  background: #ffee58;
+  box-shadow: 0 0 4px rgba(0,0,0,.8);
+}
+.lufs-vals {
+  display: flex; justify-content: space-between; gap: 6px;
+  margin-top: 6px; font-size: 9px; color: var(--text-3);
+  font-family: "Roboto Mono", monospace;
+}
+.lufs-vals b { font-weight: 500; color: var(--text-2); }
+.lufs-vals span:nth-child(3) b { color: #ffee58; }
 .vcol { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 44px; }
 .vcol .ovl {
   width: 100%; height: 12px;
@@ -473,7 +515,11 @@ h2 {
   margin-top: 12px;
   padding-top: 10px;
   border-top: 1px solid var(--color-2);
+  height: 165px;
+  overflow-y: auto;
+  scrollbar-width: none;
 }
+.rt-box::-webkit-scrollbar { display: none; }
 
 .rt-text {
   font-size: 18px;
@@ -720,6 +766,15 @@ h2 {
   #slideshow { width: 130px; height: 100px; }
   .vmeter { min-height: 52px; }
   .topbar-status { font-size: 12px; }
+  .station-flex { flex-wrap: wrap; }
+  .station-left { flex: 1 1 100%; }
+  .vu-block { display: none; }
+  #slideshow { margin: 0 auto; }
+  .vol-slider { max-width: none; height: 32px; padding: 10px 0; }
+  .vol-slider::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; }
+  .vol-slider::-webkit-slider-thumb { width: 26px; height: 26px; margin-top: -10px; }
+  .vol-slider::-moz-range-thumb { width: 26px; height: 26px; }
+  .vol-icon { width: 22px; height: 22px; }
 }
 
 @media only screen and (max-width: 768px) {

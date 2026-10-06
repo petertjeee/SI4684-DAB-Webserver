@@ -41,7 +41,8 @@ document.body.appendChild(audio)
 
 function connectAudioWs() {
   setupVu()
-  audio.volume = parseInt(document.getElementById('pcVolValue').textContent, 10) / 100
+  lufsReset()
+  updateVolume(document.getElementById('pcVolSlider').value)
   audio.src = '/stream'
   audio.play().catch(e => console.log('audio play:', e))
 }
@@ -56,14 +57,20 @@ function setupVu() {
   const AC = window.AudioContext || window.webkitAudioContext
   if (!AC) return
   try {
-    vuCtx = new AC()
+    try { vuCtx = new AC({ sampleRate: 48000 }) } catch (e) { vuCtx = new AC() }
     const src = vuCtx.createMediaElementSource(audio)
-    const split = vuCtx.createChannelSplitter(2)
-    src.connect(split)
-    vuAnL = vuCtx.createAnalyser(); vuAnR = vuCtx.createAnalyser()
-    vuAnL.fftSize = vuAnR.fftSize = 512
-    split.connect(vuAnL, 0); split.connect(vuAnR, 1)
-    src.connect(vuCtx.destination)
+    vuGain = vuCtx.createGain()
+    vuGain.gain.value = parseInt(document.getElementById('pcVolValue').textContent, 10) / 100
+    src.connect(vuGain)
+    vuGain.connect(vuCtx.destination)
+    audio.volume = 1
+    if (!isMobileUi()) {
+      const split = vuCtx.createChannelSplitter(2)
+      src.connect(split)
+      vuAnL = vuCtx.createAnalyser(); vuAnR = vuCtx.createAnalyser()
+      vuAnL.fftSize = vuAnR.fftSize = 512
+      split.connect(vuAnL, 0); split.connect(vuAnR, 1)
+    }
   } catch (e) { console.log('VU setup:', e) }
 }
 
@@ -78,7 +85,8 @@ const vuPct = d => {
 const VU_REL = 24, VU_PKREL = 12, VU_PKHOLD = 700
 const VU_CLIP = -0.1, VU_CLIPHOLD = 1500
 const vuSt = { rms: [-120, -120], pk: [-120, -120], pkHold: [0, 0], ovl: [0, 0] }
-let vuEls = null, vuCorrMark = null
+let vuEls = null, vuCorrMark = null, vuGain = null
+const isMobileUi = () => window.matchMedia('(max-width: 900px)').matches
 
 function initVuDom() {
   const scale = document.getElementById('vuScale')
@@ -96,12 +104,110 @@ function initVuDom() {
     }
   })
   vuCorrMark = document.getElementById('vuCorrMark')
+  const lufsBox = document.getElementById('lufsBox')
+  const meters = document.querySelector('.vu-meters')
+  const lscale = document.getElementById('lufsScale')
+  lscale.innerHTML = [...LUFS_SCALE, 0].map(d =>
+    `<span style="top:${100 - lufsPct(d)}%">${d}</span>`).join('')
+  const lm = document.getElementById('lufsMeter')
+  lm.innerHTML = '<div class="vfill"></div><div class="vpk"></div>' +
+    LUFS_SCALE.map(d => `<div class="vtick" style="bottom:${lufsPct(d)}%"></div>`).join('')
+  lufsMeterEls = {
+    fill: lm.querySelector('.vfill'), pk: lm.querySelector('.vpk'),
+    val: document.getElementById('lufsMeterVal')
+  }
+  document.querySelectorAll('.vu-mode-opt').forEach(el => {
+    el.onclick = () => {
+      vuMode = el.dataset.mode
+      document.querySelectorAll('.vu-mode-opt').forEach(o => o.classList.toggle('active', o === el))
+      meters.style.display = vuMode === 'ppm' ? '' : 'none'
+      lufsBox.style.display = vuMode === 'ppm' ? 'none' : ''
+    }
+  })
 }
 
 function vuPeakDb(buf) {
   let m = 0
   for (let i = 0; i < buf.length; i++) { const a = Math.abs(buf[i]); if (a > m) m = a }
   return 20 * Math.log10(m + 1e-9)
+}
+
+/* EBU R128 loudness — K-weighting (48 kHz coefficients), momentary 400 ms,
+   short-term 3 s, integrated with -70/-10 LU gating */
+const K_SHELF = { b: [1.53512485958697, -2.69169618940638, 1.19839281085285], a: [1, -1.69065929318241, 0.73248077421585] }
+const K_HP = { b: [1, -2, 1], a: [1, -1.99004745483398, 0.99007225036621] }
+const kState = [{ s1: [0, 0], s2: [0, 0] }, { s1: [0, 0], s2: [0, 0] }]
+let vuMode = 'ppm'
+const lufsFrames = []
+const lufsBlocks = []
+let lufsLastBlock = 0
+let vuLufs = null, lufsMeterEls = null, lufsSm = -120
+const LUFS_SCALE = [-50, -40, -30, -23, -10]
+const lufsPct = d => (Math.max(-50, Math.min(0, d)) + 50) / 50 * 100
+
+function kBiquad(co, st, x) {
+  const y = co.b[0] * x + st[0]
+  st[0] = co.b[1] * x - co.a[1] * y + st[1]
+  st[1] = co.b[2] * x - co.a[2] * y
+  return y
+}
+
+function lufsReset() {
+  lufsFrames.length = 0; lufsBlocks.length = 0
+  lufsLastBlock = 0; lufsSm = -120
+}
+
+function lufsMetering(now) {
+  let e = 0
+  for (let i = 0; i < vuBufL.length; i++) {
+    const l = kBiquad(K_HP, kState[0].s2, kBiquad(K_SHELF, kState[0].s1, vuBufL[i]))
+    const r = kBiquad(K_HP, kState[1].s2, kBiquad(K_SHELF, kState[1].s1, vuBufR[i]))
+    e += l * l + r * r
+  }
+  lufsFrames.push({ t: now, e: e / vuBufL.length })
+  while (lufsFrames.length && lufsFrames[0].t < now - 3100) lufsFrames.shift()
+  // R128 integrated: 400 ms blocks with 75% overlap -> push every 100 ms
+  if (now - lufsLastBlock >= 100) {
+    lufsBlocks.push(lufsWindow(now, 400))
+    if (lufsBlocks.length > 3600) lufsBlocks.shift()
+    lufsLastBlock = now
+  }
+}
+
+function lufsWindow(now, ms) {
+  let s = 0, n = 0
+  for (let i = lufsFrames.length - 1; i >= 0 && lufsFrames[i].t > now - ms; i--) {
+    s += lufsFrames[i].e; n++
+  }
+  return n ? s / n : 0
+}
+
+function lufsIntegrated() {
+  const toL = e => e > 0 ? -0.691 + 10 * Math.log10(e) : -Infinity
+  const g1 = lufsBlocks.filter(e => toL(e) > -70)
+  if (!g1.length) return -Infinity
+  const rel = toL(g1.reduce((a, b) => a + b, 0) / g1.length) - 10
+  const g2 = g1.filter(e => toL(e) > rel)
+  if (!g2.length) return -Infinity
+  return toL(g2.reduce((a, b) => a + b, 0) / g2.length)
+}
+
+function updateLufsDom(now, dt) {
+  if (!vuLufs) {
+    vuLufs = { M: document.getElementById('lufsM'), S: document.getElementById('lufsS'), I: document.getElementById('lufsI') }
+  }
+  const toL = e => e > 0 ? -0.691 + 10 * Math.log10(e) : -Infinity
+  const fmt = v => Number.isFinite(v) ? v.toFixed(1) : '-∞'
+  const m = toL(lufsWindow(now, 400)), s = toL(lufsWindow(now, 3000)), i = lufsIntegrated()
+  vuLufs.M.textContent = fmt(m)
+  vuLufs.S.textContent = fmt(s)
+  vuLufs.I.textContent = fmt(i)
+  if (lufsMeterEls) {
+    lufsSm = Number.isFinite(m) ? Math.max(m, lufsSm - 20 * dt) : Math.max(-60, lufsSm - 20 * dt)
+    lufsMeterEls.fill.style.height = (100 - lufsPct(lufsSm)) + '%'
+    lufsMeterEls.pk.style.bottom = lufsPct(Number.isFinite(i) ? i : -50) + '%'
+    lufsMeterEls.val.textContent = fmt(m)
+  }
 }
 
 let vuLast = performance.now()
@@ -119,6 +225,7 @@ function vuLoop(now) {
     }
     const c = ll * rr > 1e-12 ? lr / Math.sqrt(ll * rr) : 0
     vuCorr += (Math.max(-1, Math.min(1, c)) - vuCorr) * 0.15
+    lufsMetering(now)
   } else {
     vuCorr *= 0.98
   }
@@ -136,9 +243,16 @@ function vuLoop(now) {
     }
     if (vuCorrMark) vuCorrMark.style.left = ((vuCorr + 1) / 2 * 100) + '%'
   }
+  if (vuMode === 'lufs') updateLufsDom(now, dt)
   requestAnimationFrame(vuLoop)
 }
 requestAnimationFrame(() => { initVuDom(); vuLast = performance.now(); vuLoop(vuLast) })
+
+// keep the Web Audio graph running on iOS (suspend on backgrounding/gesture loss)
+audio.addEventListener('playing', () => { if (vuCtx?.state === 'suspended') vuCtx.resume() })
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && vuCtx?.state === 'suspended') vuCtx.resume()
+})
 
 // ===== SIGNAL GRAPH =====
 const canvas = document.getElementById('signalCanvas')
@@ -217,7 +331,9 @@ function togglePlay() {
 function updateVolume(val) {
   document.getElementById('pcVolValue').textContent = val
   document.getElementById('pcVolSlider').style.setProperty('--vol', val + '%')
-  audio.volume = Math.max(0, Math.min(1, val / 100))
+  const v = Math.max(0, Math.min(1, val / 100))
+  if (vuGain) vuGain.gain.setTargetAtTime(v, vuCtx.currentTime, 0.03)
+  else audio.volume = v
 }
 
 updateVolume(100)
@@ -226,6 +342,10 @@ let isMuted = false
 function toggleMute() {
   isMuted = !isMuted
   audio.muted = isMuted
+  if (vuGain) {
+    const v = isMuted ? 0 : parseInt(document.getElementById('pcVolValue').textContent, 10) / 100
+    vuGain.gain.setTargetAtTime(v, vuCtx.currentTime, 0.03)
+  }
   document.getElementById('pcVolIcon').style.color = isMuted ? '#e53935' : ''
 }
 
@@ -771,7 +891,7 @@ function drawScanChart(results) {
     scanCtx.fillStyle = grad
     scanCtx.fillRect(x, y, barW, h)
     scanCtx.fillStyle = (r.lock && sig > 3) ? color : '#ffffff'
-    scanCtx.font = '12px Share Tech Mono'
+    scanCtx.font = '11px "Roboto Mono", monospace'
     scanCtx.textAlign = 'center'
     if (r.name) scanCtx.fillText(r.name, x + barW / 2, y - 2)
   }
@@ -807,6 +927,9 @@ scanCanvas.addEventListener('click', e => {
   block.classList.add('highlight')
   setTimeout(() => block.classList.remove('highlight'), 1600)
 })
+
+// redraw labels once webfonts are loaded (canvas uses Roboto Mono)
+if (document.fonts?.ready) document.fonts.ready.then(() => drawScanChart(scanResults))
 
 // ===== SERVICES SCAN LIST =====
 function renderServicesScanList(results) {
