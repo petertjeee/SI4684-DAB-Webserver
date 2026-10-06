@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:ital,wght@0,200;0,300;0,400;0,600;0,700;0,900;1,200;1,300;1,400;1,600;1,700&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=4">
+  <link rel="stylesheet" href="/css/style.css?v=7">
 </head>
 <body>
 
@@ -94,7 +94,7 @@
           <div class="rt-box">
             <h2 style="margin-top:0;">Radiotext</h2>
             <div class="rt-text" id="pcRtText">No data</div>
-            <div id="dlPlusBox" style="display:none; margin-top:10px; border-top:1px solid var(--color-2); padding-top:8px;">
+            <div id="dlPlusBox" style="margin-top:10px; border-top:1px solid var(--color-2); padding-top:8px;">
               <h2 style="margin-top:0;">DL+</h2>
               <div class="rt-text" id="dlPlusText"></div>
             </div>
@@ -103,6 +103,7 @@
         <div class="vu-block">
           <div class="vu-head">
             <span class="vu-mode-opt active" data-mode="ppm">PPM</span><span class="vu-mode-opt" data-mode="lufs">LUFS</span>
+            <button class="vu-reset" id="lufsResetBtn" style="display:none" title="Reset LUFS-meting">RST</button>
           </div>
           <div class="vu-meters">
             <div class="vcol">
@@ -208,7 +209,7 @@
 
 </div>
 
-<script src="/js/constants.js?v=4"></script>
-<script src="/js/main.js?v=4"></script>
+<script src="/js/constants.js?v=7"></script>
+<script src="/js/main.js?v=7"></script>
 </body>
 </html>

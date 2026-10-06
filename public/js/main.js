@@ -122,8 +122,10 @@ function initVuDom() {
       document.querySelectorAll('.vu-mode-opt').forEach(o => o.classList.toggle('active', o === el))
       meters.style.display = vuMode === 'ppm' ? '' : 'none'
       lufsBox.style.display = vuMode === 'ppm' ? 'none' : ''
+      document.getElementById('lufsResetBtn').style.display = vuMode === 'lufs' ? '' : 'none'
     }
   })
+  document.getElementById('lufsResetBtn').onclick = lufsReset
 }
 
 function vuPeakDb(buf) {
@@ -241,7 +243,10 @@ function vuLoop(now) {
       e.pk.style.bottom = vuPct(vuSt.pk[i]) + '%'
       e.val.textContent = vuSt.pk[i] <= -60 ? '-∞' : vuSt.pk[i].toFixed(1)
     }
-    if (vuCorrMark) vuCorrMark.style.left = ((vuCorr + 1) / 2 * 100) + '%'
+    if (vuCorrMark) {
+      vuCorrMark.style.left = ((vuCorr + 1) / 2 * 100) + '%'
+      vuCorrMark.classList.toggle('neg', vuCorr < 0)
+    }
   }
   if (vuMode === 'lufs') updateLufsDom(now, dt)
   requestAnimationFrame(vuLoop)
@@ -442,24 +447,20 @@ const DLPLUS_LABELS = {
   'DESCRIPTOR': 'Omschrijving', 'PURCHASE': 'Aankoop'
 }
 
+const DLPLUS_MAIN = ['ARTIST', 'TITLE', 'ALBUM', 'ITEM.GENRE', 'ITEM.COMPOSITION']
+
 function updateDlPlus(obj) {
-  const box = document.getElementById('dlPlusBox')
-  const el  = document.getElementById('dlPlusText')
-  if (!box || !el) return
-
-  const keys = Object.keys(obj || {}).filter(k => k !== 'IR' && k !== 'IT' && obj[k])
-  if (keys.length === 0) { box.style.display = 'none'; el.innerHTML = ''; return }
-
-  const ordered = [
-    ...DLPLUS_ORDER.filter(k => keys.includes(k)),
-    ...keys.filter(k => !DLPLUS_ORDER.includes(k)).sort()
-  ]
-  el.innerHTML = ordered.map(k => {
-    const label = DLPLUS_LABELS[k] || k
-    const val = String(obj[k]).replace(/</g, '&lt;')
-    return `<div class="dlplus-line"><span class="dlplus-label">${label}</span>${val}</div>`
-  }).join('')
-  box.style.display = ''
+  const el = document.getElementById('dlPlusText')
+  if (!el) return
+  obj = obj || {}
+  const line = (k, val) =>
+    `<div class="dlplus-line"><span class="dlplus-label">${DLPLUS_LABELS[k] || k}</span>${String(val || '—').replace(/</g, '&lt;')}</div>`
+  const ord = k => { const i = DLPLUS_ORDER.indexOf(k); return i === -1 ? 999 : i }
+  const extraKeys = Object.keys(obj)
+    .filter(k => k !== 'IR' && k !== 'IT' && !DLPLUS_MAIN.includes(k) && obj[k])
+    .sort((a, b) => ord(a) - ord(b))
+  el.innerHTML = DLPLUS_MAIN.map(k => line(k, obj[k])).join('') +
+    extraKeys.map(k => line(k, obj[k])).join('')
 }
 
 function updateDebug(data) {
@@ -540,6 +541,9 @@ function handleMessage(msg) {
 
     case 'service':
       activeService = String(msg.id)
+      lufsReset()
+      updateDlPlus({})
+      document.getElementById('pcRtText').textContent = 'No data'
       servicesDropdown.value = String(msg.id)
       setTimeout(() => {
         document.getElementById('pcStationTitle').textContent = getStationName(msg.id)
@@ -549,6 +553,7 @@ function handleMessage(msg) {
       break
 
     case 'tune':
+      lufsReset()
       const sel = document.getElementById('tuneSelect')
       if (sel) sel.value = String(msg.data)
       updateTuneDisplay(msg.data)
@@ -632,8 +637,7 @@ function handleMessage(msg) {
       ensembleEcc = null
       ensembleDabTime = null
       updateEnsembleMeta()
-      document.getElementById('dlPlusBox').style.display = 'none'
-      document.getElementById('dlPlusText').innerHTML = ''
+      updateDlPlus({})
       document.getElementById('headerEnsemble').textContent = '-'
       servicesDropdown.innerHTML = ''
       document.getElementById('serviceInfo').innerHTML = ''
@@ -685,6 +689,9 @@ function handleMessage(msg) {
 
     case 'activeService':
       activeService = String(msg.id)
+      lufsReset()
+      updateDlPlus({})
+      document.getElementById('pcRtText').textContent = 'No data'
       document.querySelectorAll('.svc-scan-item').forEach(el => {
         el.classList.toggle('active', el.dataset.ch == msg.ch && el.dataset.svcId == msg.id)
       })
@@ -1019,3 +1026,15 @@ window.addEventListener('pagehide', () => {
 
 // init
 populateTuneDropdown(null)
+updateDlPlus({})
+
+
+// layout debug (alleen met ?laydbg=1)
+if (location.search.includes('laydbg')) setTimeout(() => {
+  const r = s => { const e = document.querySelector(s); return e ? Math.round(e.getBoundingClientRect().height) : 'x' }
+  const css = getComputedStyle(document.querySelector('.vu-block'))
+  document.title = 'UA:' + navigator.userAgent.split(') ').pop() +
+    ' | panel=' + r('.station-panel') + ' split=' + r('.station-split') + ' vublock=' + r('.vu-block') +
+    ' vumeters=' + r('.vu-meters') + ' rt=' + r('.rt-box') +
+    ' | vupos=' + css.position + ' fs=' + css.flexDirection
+}, 3000)

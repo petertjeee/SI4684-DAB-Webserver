@@ -114,6 +114,8 @@ function initSerial() {
       state.service     = line.slice(9).trim()
       state.serviceType = getServiceType(state.service)
       state.slideshow   = null
+      state.dlPlus      = {}
+      state.dynamicLabel = null
       broadcast({ type: 'service', id: state.service, serviceType: state.serviceType })
       broadcast({ type: 'image', data: fs.readFileSync('./public/images/default.jpg').toString('base64') })
       return
@@ -266,8 +268,8 @@ function initSerial() {
         if (idx === -1) return
         obj[p.slice(0, idx).trim()] = p.slice(idx + 1).trim()
       })
-      state.dlPlus = obj
-      broadcast({ type: 'dlPlus', data: obj })
+      state.dlPlus = { ...state.dlPlus, ...obj }
+      broadcast({ type: 'dlPlus', data: state.dlPlus })
       return
     }
 

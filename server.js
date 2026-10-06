@@ -21,7 +21,11 @@ app.use((req, res, next) => {
 })
 
 registerSetup(app)
-app.use(express.static('public'))
+app.use(express.static('public', {
+  setHeaders: (res, path) => {
+    if (/\.(html|js|css)$/.test(path)) res.setHeader('Cache-Control', 'no-cache')
+  }
+}))
 
 initWebSocket(server)
 initSerial()
