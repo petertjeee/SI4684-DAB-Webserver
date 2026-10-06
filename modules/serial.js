@@ -19,10 +19,13 @@ function getServiceType(id) {
 function resetMuxState() {
   state.ensemble     = null
   state.ensembleName = null
+  state.ecc          = null
+  state.dabTime      = null
   state.servicesList = []
   state.serviceInfo  = {}
   state.serviceType  = null
   state.dynamicLabel = null
+  state.dlPlus       = {}
   state.slideshow    = null
   slideshowChunks    = []
   collectingBase64   = false
@@ -51,6 +54,7 @@ function initSerial() {
     port.write('ENABLE=0\n')
     setTimeout(() => {
       port.write('ENABLE=1\n')
+      port.write('DEBUG=1\n')
       state.enabled = true
       info('SI4686 DAB Receiver enabled')
       if (config.scan?.autoScanOnStart) {
@@ -133,20 +137,30 @@ function initSerial() {
       const headerParts = headerPart.split(',')
       const ensembleField = headerParts.find(x => x.startsWith('ENSEMBLE='))
       if (ensembleField) state.ensemble = ensembleField.slice(9).trim()
+      const eccField = headerParts.find(x => x.startsWith('ECC='))
+      state.ecc = eccField ? eccField.slice(4).trim() : null
       const ensembleIndex = headerParts.indexOf(ensembleField)
       if (ensembleIndex !== -1 && headerParts[ensembleIndex + 1]) {
-        state.ensembleName = headerParts[ensembleIndex + 1].trim()
+        const cand = headerParts[ensembleIndex + 1].trim()
+        if (!cand.includes('=')) state.ensembleName = cand
       }
       if (servicesPartRaw) {
         state.servicesList = servicesPartRaw.split(';').map(s => {
           const parts = s.split(',')
-          return { id: parts[0]?.trim(), type: parts[1]?.trim(), name: parts.slice(2).join(',').trim() }
+          const rawName = parts.slice(2).join(',').trim()
+          const barIdx = rawName.indexOf('|')
+          return {
+            id:    parts[0]?.trim(),
+            type:  parts[1]?.trim(),
+            name:  (barIdx >= 0 ? rawName.slice(0, barIdx) : rawName).trim(),
+            short: barIdx >= 0 ? rawName.slice(barIdx + 1).trim() : null
+          }
         }).filter(s => s.id !== undefined && s.name)
       }
       if (state.service && !state.serviceType) {
         state.serviceType = getServiceType(state.service)
       }
-      broadcast({ type: 'ensembleInfo', ensemble: state.ensemble, ensembleName: state.ensembleName })
+      broadcast({ type: 'ensembleInfo', ensemble: state.ensemble, ensembleName: state.ensembleName, ecc: state.ecc })
       broadcast({ type: 'servicesList', data: state.servicesList })
 
       const ch = parseInt(state.tune)
@@ -165,16 +179,17 @@ function initSerial() {
             lock:       true,
             ensemble:   state.ensembleName,
             ensembleId: state.ensemble,
+            ecc:        state.ecc,
             services:   []
           }
         }
         const newServices = state.servicesList
-          .filter(s => AUDIO_MODES.includes(s.type))
-          .map(s => ({ id: s.id, name: s.name, type: s.type }))
+          .map(s => ({ id: s.id, name: s.name, short: s.short, type: s.type }))
         if (newServices.length > 0) {
           if (newServices.length >= (state.scanResults[ch].services?.length || 0)) {
             state.scanResults[ch].ensemble   = state.ensembleName
             state.scanResults[ch].ensembleId = state.ensemble
+            state.scanResults[ch].ecc        = state.ecc
             state.scanResults[ch].lock       = true
             state.scanResults[ch].services   = newServices
             broadcast({ type: 'scanResultsUpdated', data: getScanResultsCompact() })
@@ -219,8 +234,46 @@ function initSerial() {
       if (!isNaN(ch) && state.scanResults[ch]) {
         state.scanResults[ch].signal = parseFloat(obj.SIGNAL) || 0
         state.scanResults[ch].lock   = obj.LOCK === '1'
+        state.scanResults[ch].cnr    = parseFloat(obj.CNR) || 0
+        state.scanResults[ch].snr    = parseFloat(obj.SNR) || 0
+        state.scanResults[ch].fic    = parseFloat(obj.FIC) || 0
         broadcast({ type: 'scanUpdate', ch, signal: state.scanResults[ch].signal, lock: obj.LOCK === '1' })
       }
+      return
+    }
+
+    if (line.startsWith('$DBG')) {
+      const obj = {}
+      line.slice(4).trim().split(/\s+/).forEach(p => {
+        const idx = p.indexOf('=')
+        if (idx === -1) return
+        obj[p.slice(0, idx).trim()] = p.slice(idx + 1).trim()
+      })
+      state.debug = obj
+      broadcast({ type: 'debug', data: obj })
+
+      const ch = parseInt(state.tune)
+      if (!isNaN(ch) && state.scanResults[ch] && state.scanResults[ch].lock) {
+        state.scanResults[ch].fiberr = parseInt(obj.FIBERR) || 0
+      }
+      return
+    }
+
+    if (line.startsWith('$DP=')) {
+      const obj = {}
+      line.slice(4).split('|').forEach(p => {
+        const idx = p.indexOf('=')
+        if (idx === -1) return
+        obj[p.slice(0, idx).trim()] = p.slice(idx + 1).trim()
+      })
+      state.dlPlus = obj
+      broadcast({ type: 'dlPlus', data: obj })
+      return
+    }
+
+    if (line.startsWith('$TIME=')) {
+      state.dabTime = line.slice(6).trim()
+      broadcast({ type: 'dabTime', data: state.dabTime })
       return
     }
   })

@@ -36,34 +36,109 @@ let activeService = 0
 
 // ===== AUDIO =====
 const audio = new Audio()
+audio.preload = 'none'
 document.body.appendChild(audio)
-let audioWs = null
-let liveAudioPlayer = null
 
 function connectAudioWs() {
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  const wsUrl = `${proto}//${location.host}/audio-ws`
-  try {
-    const logger = { Log: (msg) => { console.log('3LAS:', msg) } }
-    const settings = new Fallback_Settings()
-    settings.InitialBufferLength = 0.1
-
-    liveAudioPlayer = new Fallback(logger, settings)
-
-    const wsClient = new WebSocketClient(
-      logger,
-      wsUrl,
-      (e) => { console.log('ws error', e) },
-      () => { liveAudioPlayer.Init(wsClient) },
-      (data) => { liveAudioPlayer.FormatReader.PushData(new Uint8Array(data)) },
-      () => { if (isPlaying) setTimeout(connectAudioWs, 1000) }
-    )
-
-    audioWs = wsClient
-  } catch(e) {
-    alert('Eroare: ' + e.message)
-  }
+  setupVu()
+  audio.volume = parseInt(document.getElementById('pcVolValue').textContent, 10) / 100
+  audio.src = '/stream'
+  audio.play().catch(e => console.log('audio play:', e))
 }
+
+// ===== VU METERS =====
+let vuCtx = null, vuAnL = null, vuAnR = null
+const vuBufL = new Float32Array(512), vuBufR = new Float32Array(512)
+let vuCorr = 0
+
+function setupVu() {
+  if (vuCtx) { if (vuCtx.state === 'suspended') vuCtx.resume(); return }
+  const AC = window.AudioContext || window.webkitAudioContext
+  if (!AC) return
+  try {
+    vuCtx = new AC()
+    const src = vuCtx.createMediaElementSource(audio)
+    const split = vuCtx.createChannelSplitter(2)
+    src.connect(split)
+    vuAnL = vuCtx.createAnalyser(); vuAnR = vuCtx.createAnalyser()
+    vuAnL.fftSize = vuAnR.fftSize = 512
+    split.connect(vuAnL, 0); split.connect(vuAnR, 1)
+    src.connect(vuCtx.destination)
+  } catch (e) { console.log('VU setup:', e) }
+}
+
+/* PPM-style peak meters, ballistics adapted from audio-monitor:
+   non-linear scale (top 20 dB gets 60%), 24 dB/s release,
+   700 ms peak-hold then 12 dB/s decay, OVL at -0.1 dB */
+const VU_SCALE = [-60, -40, -30, -18, -9, -3]
+const vuPct = d => {
+  d = Math.max(-60, Math.min(0, d))
+  return d >= -20 ? 40 + (d + 20) * 3 : d + 60
+}
+const VU_REL = 24, VU_PKREL = 12, VU_PKHOLD = 700
+const VU_CLIP = -0.1, VU_CLIPHOLD = 1500
+const vuSt = { rms: [-120, -120], pk: [-120, -120], pkHold: [0, 0], ovl: [0, 0] }
+let vuEls = null, vuCorrMark = null
+
+function initVuDom() {
+  const scale = document.getElementById('vuScale')
+  if (!scale) return
+  scale.innerHTML = [...VU_SCALE, 0].map(d =>
+    `<span style="top:${100 - vuPct(d)}%">${d}</span>`).join('')
+  vuEls = [0, 1].map(i => {
+    const m = document.getElementById('vuM' + i)
+    m.innerHTML = '<div class="vfill"></div><div class="vpk"></div>' +
+      VU_SCALE.map(d => `<div class="vtick" style="bottom:${vuPct(d)}%"></div>`).join('')
+    return {
+      fill: m.querySelector('.vfill'), pk: m.querySelector('.vpk'),
+      ovl: document.getElementById('vuOvl' + i),
+      val: document.getElementById('vuV' + i)
+    }
+  })
+  vuCorrMark = document.getElementById('vuCorrMark')
+}
+
+function vuPeakDb(buf) {
+  let m = 0
+  for (let i = 0; i < buf.length; i++) { const a = Math.abs(buf[i]); if (a > m) m = a }
+  return 20 * Math.log10(m + 1e-9)
+}
+
+let vuLast = performance.now()
+function vuLoop(now) {
+  const dt = Math.min(0.1, (now - vuLast) / 1000)
+  vuLast = now
+  const tP = [-120, -120]
+  if (isPlaying && vuAnL) {
+    vuAnL.getFloatTimeDomainData(vuBufL)
+    vuAnR.getFloatTimeDomainData(vuBufR)
+    tP[0] = vuPeakDb(vuBufL); tP[1] = vuPeakDb(vuBufR)
+    let lr = 0, ll = 0, rr = 0
+    for (let i = 0; i < vuBufL.length; i++) {
+      lr += vuBufL[i] * vuBufR[i]; ll += vuBufL[i] * vuBufL[i]; rr += vuBufR[i] * vuBufR[i]
+    }
+    const c = ll * rr > 1e-12 ? lr / Math.sqrt(ll * rr) : 0
+    vuCorr += (Math.max(-1, Math.min(1, c)) - vuCorr) * 0.15
+  } else {
+    vuCorr *= 0.98
+  }
+  if (vuEls) {
+    for (let i = 0; i < 2; i++) {
+      vuSt.rms[i] = Math.max(tP[i], vuSt.rms[i] - VU_REL * dt)
+      if (tP[i] >= vuSt.pk[i]) { vuSt.pk[i] = tP[i]; vuSt.pkHold[i] = now + VU_PKHOLD }
+      else if (now > vuSt.pkHold[i]) vuSt.pk[i] = Math.max(vuSt.pk[i] - VU_PKREL * dt, vuSt.rms[i])
+      if (tP[i] >= VU_CLIP) vuSt.ovl[i] = now + VU_CLIPHOLD
+      const e = vuEls[i]
+      e.ovl.classList.toggle('on', now < vuSt.ovl[i])
+      e.fill.style.height = (100 - vuPct(vuSt.rms[i])) + '%'
+      e.pk.style.bottom = vuPct(vuSt.pk[i]) + '%'
+      e.val.textContent = vuSt.pk[i] <= -60 ? '-∞' : vuSt.pk[i].toFixed(1)
+    }
+    if (vuCorrMark) vuCorrMark.style.left = ((vuCorr + 1) / 2 * 100) + '%'
+  }
+  requestAnimationFrame(vuLoop)
+}
+requestAnimationFrame(() => { initVuDom(); vuLast = performance.now(); vuLoop(vuLast) })
 
 // ===== SIGNAL GRAPH =====
 const canvas = document.getElementById('signalCanvas')
@@ -97,8 +172,8 @@ function drawGraph() {
   ctx.lineTo(W, H)
   ctx.closePath()
   const grad = ctx.createLinearGradient(0, 0, 0, H)
-  grad.addColorStop(0, 'rgba(0,210,255,0.25)')
-  grad.addColorStop(1, 'rgba(0,210,255,0)')
+  grad.addColorStop(0, 'rgba(88,219,171,0.25)')
+  grad.addColorStop(1, 'rgba(88,219,171,0)')
   ctx.fillStyle = grad
   ctx.fill()
 
@@ -108,7 +183,7 @@ function drawGraph() {
     const y = H - ((v - min) / (max - min)) * H
     i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)
   })
-  ctx.strokeStyle = '#00d2ff'
+  ctx.strokeStyle = '#58dbab'
   ctx.lineWidth = 1.5
   ctx.stroke()
 }
@@ -133,27 +208,24 @@ function togglePlay() {
     if (isAppleiOS && 'audioSession' in navigator) {
       navigator.audioSession.type = "none"
     }
-    if (audioWs) { audioWs.Socket.close(); audioWs = null }
-    liveAudioPlayer = null
+    audio.pause()
+    audio.removeAttribute('src')
+    audio.load()
   }
 }
 
 function updateVolume(val) {
   document.getElementById('pcVolValue').textContent = val
   document.getElementById('pcVolSlider').style.setProperty('--vol', val + '%')
-  if (liveAudioPlayer?.Player) {
-    liveAudioPlayer.Player.Volume = val / 100
-  }
+  audio.volume = Math.max(0, Math.min(1, val / 100))
 }
 
-updateVolume(50)
+updateVolume(100)
 
 let isMuted = false
 function toggleMute() {
   isMuted = !isMuted
-  if (liveAudioPlayer?.Player) {
-    liveAudioPlayer.Player.Volume = isMuted ? 0 : (parseInt(document.getElementById('pcVolValue').textContent) / 100)
-  }
+  audio.muted = isMuted
   document.getElementById('pcVolIcon').style.color = isMuted ? '#e53935' : ''
 }
 
@@ -214,6 +286,81 @@ function setAudioType(type) {
   if (el) el.textContent = SERVICE_MODES[type] || 'DAB+'
 }
 
+// ===== DL+ / ENSEMBLE META =====
+let ensembleEcc = null
+let ensembleDabTime = null
+
+function updateEnsembleMeta() {
+  const parts = []
+  if (ensembleEcc) parts.push('ECC ' + ensembleEcc)
+  if (ensembleDabTime) {
+    const t = String(ensembleDabTime).replace('T', ' ').replace('Z', ' UTC').trim()
+    parts.push(t)
+  }
+  const el = document.getElementById('ensembleMeta')
+  if (el) el.textContent = parts.join(' \u00b7 ')
+}
+
+const DLPLUS_ORDER = [
+  'STATIONNAME.LONG', 'PROGRAMME.NOW', 'PROGRAMME.NEXT', 'PROGRAMME.LATER',
+  'ARTIST', 'TITLE', 'ITEM.COMPOSITION', 'ITEM.GENRE', 'ALBUM', 'BAND',
+  'PLACENAME', 'INFO.NEWS', 'INFO.NEWS.LOCAL', 'INFO.SPORT', 'INFO.WEATHER',
+  'INFO.TRAFFIC', 'INFO.ALARM', 'INFO.ADVERTISEMENT', 'INFO.URL', 'INFO.OTHER',
+  'PHONE.STUDIO', 'SMS.STUDIO', 'EMAIL.STUDIO', 'CHAT', 'VOTE', 'DESCRIPTOR', 'PURCHASE'
+]
+
+const DLPLUS_LABELS = {
+  'STATIONNAME.LONG': 'Station', 'STATIONNAME.SHORT': 'Station',
+  'PROGRAMME.NOW': 'Nu', 'PROGRAMME.NEXT': 'Straks', 'PROGRAMME.LATER': 'Later',
+  'ARTIST': 'Artiest', 'TITLE': 'Titel', 'ITEM.COMPOSITION': 'Compositie',
+  'ITEM.GENRE': 'Genre', 'ALBUM': 'Album', 'BAND': 'Band',
+  'PLACENAME': 'Plaats', 'INFO.NEWS': 'Nieuws', 'INFO.NEWS.LOCAL': 'Nieuws lokaal',
+  'INFO.SPORT': 'Sport', 'INFO.WEATHER': 'Weer', 'INFO.TRAFFIC': 'Verkeer',
+  'INFO.ALARM': 'Alarm', 'INFO.ADVERTISEMENT': 'Reclame', 'INFO.URL': 'URL',
+  'INFO.OTHER': 'Info', 'PHONE.STUDIO': 'Studio', 'SMS.STUDIO': 'SMS',
+  'EMAIL.STUDIO': 'E-mail', 'CHAT': 'Chat', 'VOTE': 'Stemmen',
+  'DESCRIPTOR': 'Omschrijving', 'PURCHASE': 'Aankoop'
+}
+
+function updateDlPlus(obj) {
+  const box = document.getElementById('dlPlusBox')
+  const el  = document.getElementById('dlPlusText')
+  if (!box || !el) return
+
+  const keys = Object.keys(obj || {}).filter(k => k !== 'IR' && k !== 'IT' && obj[k])
+  if (keys.length === 0) { box.style.display = 'none'; el.innerHTML = ''; return }
+
+  const ordered = [
+    ...DLPLUS_ORDER.filter(k => keys.includes(k)),
+    ...keys.filter(k => !DLPLUS_ORDER.includes(k)).sort()
+  ]
+  el.innerHTML = ordered.map(k => {
+    const label = DLPLUS_LABELS[k] || k
+    const val = String(obj[k]).replace(/</g, '&lt;')
+    return `<div class="dlplus-line"><span class="dlplus-label">${label}</span>${val}</div>`
+  }).join('')
+  box.style.display = ''
+}
+
+function updateDebug(data) {
+  const rssi = parseFloat(data.RSSI)
+  if (!isNaN(rssi)) {
+    setBar('rssi', normalize(rssi, 0, 70))
+    document.getElementById('rssiVal').textContent = rssi.toFixed(0)
+  }
+  const fib = parseInt(data.FIBERR)
+  if (!isNaN(fib)) {
+    document.getElementById('fiberrVal').textContent = String(fib)
+  }
+  if (data.SNR !== undefined) {
+    const snr = parseFloat(data.SNR)
+    if (!isNaN(snr) && snr < 100) {
+      setBar('snr', normalize(snr, 0, 25))
+      document.getElementById('snrVal').textContent = snr.toFixed(0)
+    }
+  }
+}
+
 function getStationName(id) {
   const opt = document.getElementById('services').querySelector(`option[value="${id}"]`)
   return opt ? opt.text : id
@@ -243,8 +390,11 @@ function handleMessage(msg) {
         document.getElementById('pcStationTitle').textContent = getStationName(msg.service)
       }
       if (msg.serviceType) setAudioType(msg.serviceType)
-      if (msg.ensemble || msg.ensembleName) updateEnsemble(msg.ensemble, msg.ensembleName)
+      if (msg.ensemble || msg.ensembleName) updateEnsemble(msg.ensemble, msg.ensembleName, msg.ecc)
       if (msg.dynamicLabel) setRadioText(msg.dynamicLabel)
+      if (msg.dlPlus) updateDlPlus(msg.dlPlus)
+      if (msg.dabTime) { ensembleDabTime = msg.dabTime; updateEnsembleMeta() }
+      if (msg.debug) updateDebug(msg.debug)
       if (msg.signal) updateSignal(msg.signal)
       if (msg.slideshow) img.src = 'data:image/jpeg;base64,' + msg.slideshow
       if (msg.serviceInfo) renderServiceInfo(msg.serviceInfo)
@@ -289,7 +439,20 @@ function handleMessage(msg) {
       break
 
     case 'ensembleInfo':
-      updateEnsemble(msg.ensemble, msg.ensembleName)
+      updateEnsemble(msg.ensemble, msg.ensembleName, msg.ecc)
+      break
+
+    case 'debug':
+      updateDebug(msg.data)
+      break
+
+    case 'dlPlus':
+      updateDlPlus(msg.data)
+      break
+
+    case 'dabTime':
+      ensembleDabTime = msg.data
+      updateEnsembleMeta()
       break
 
     case 'dynamicLabel':
@@ -346,6 +509,11 @@ function handleMessage(msg) {
       document.getElementById('pcAudioType').textContent = 'DAB+'
       document.getElementById('ensemble').textContent = '-'
       document.getElementById('ensembleId').textContent = '-'
+      ensembleEcc = null
+      ensembleDabTime = null
+      updateEnsembleMeta()
+      document.getElementById('dlPlusBox').style.display = 'none'
+      document.getElementById('dlPlusText').innerHTML = ''
       document.getElementById('headerEnsemble').textContent = '-'
       servicesDropdown.innerHTML = ''
       document.getElementById('serviceInfo').innerHTML = ''
@@ -417,9 +585,10 @@ function updateTuneDisplay(tune) {
   document.getElementById('headerTune').textContent = ch ? `${ch.name} \u00b7 ${ch.freq} MHz` : `CH ${tune}`
 }
 
-function updateEnsemble(ensemble, ensembleName) {
+function updateEnsemble(ensemble, ensembleName, ecc) {
   document.getElementById('ensemble').textContent = ensembleName || '-'
   document.getElementById('ensembleId').textContent = ensemble || '-'
+  if (ecc !== undefined) { ensembleEcc = ecc; updateEnsembleMeta() }
   document.getElementById('headerEnsemble').textContent = ensembleName || '-'
   document.getElementById('pcEnsembleName').textContent = (ensembleName || '\u2014') + ' \u00b7 ' + (ensemble || '\u2014')
 }
@@ -456,7 +625,9 @@ function updateSignal(data) {
   if (!isNaN(sig)) {
     signalHistory.push(sig)
     if (signalHistory.length > MAX_POINTS * 2) signalHistory.splice(0, MAX_POINTS)
-    document.getElementById('signalBig').innerHTML = sig.toFixed(1) + '<span>dBuV</span>'
+    document.getElementById('signalBig').innerHTML = sig.toFixed(1) + '<span class="text-medium">dB&#181;V</span>'
+    const g = document.getElementById('signalGraphVal')
+    if (g) g.textContent = sig.toFixed(1) + ' dB\u00b5V'
   }
 
   setBar('cnr', normalize(data.CNR,  0, 100))
@@ -466,6 +637,14 @@ function updateSignal(data) {
   const fic = parseFloat(data.FIC)
   if (!isNaN(cnr)) document.getElementById('cnrVal').textContent = cnr.toFixed(1)
   if (!isNaN(fic)) document.getElementById('ficVal').textContent = fic.toFixed(0) + '%'
+
+  if (data.SNR !== undefined) {
+    const snr = parseFloat(data.SNR)
+    if (!isNaN(snr)) {
+      setBar('snr', normalize(snr, 0, 25))
+      document.getElementById('snrVal').textContent = snr.toFixed(0)
+    }
+  }
 
   const lockEl    = document.getElementById('lock')
   const lockLabel = document.getElementById('lockLabel')
@@ -581,10 +760,10 @@ function drawScanChart(results) {
     const y = H - h
 
     let color
-    if (!r.lock || sig < 3)  color = '#1a3a4a'
-    else if (sig < 10)        color = '#00d2ff'
-    else if (sig < 20)        color = '#00e676'
-    else                      color = '#ffeb3b'
+    if (!r.lock || sig < 3)  color = '#26332d'
+    else if (sig < 10)        color = '#2e6e57'
+    else if (sig < 20)        color = '#58dbab'
+    else                      color = '#baffdf'
 
     const grad = scanCtx.createLinearGradient(0, y, 0, H)
     grad.addColorStop(0, color)
@@ -614,7 +793,19 @@ scanCanvas.addEventListener('click', e => {
   const W = scanCanvas.width
   const barW = Math.floor(W / 38) - 1.40
   const ch = Math.floor(xCSS * (W / rect.width) / (barW + 2))
-  if (ch >= 0 && ch < 38) wsSend({ type: 'setTune', channel: String(ch) })
+  if (ch < 0 || ch > 37) return
+  const block = document.querySelector(`.svc-scan-channel[data-ch="${ch}"]`)
+  if (!block) return
+  const toggle = block.querySelector('.svc-scan-channel-toggle')
+  const list = block.querySelector('.svc-scan-services')
+  if (!list.classList.contains('open')) {
+    toggle.classList.add('open')
+    list.classList.add('open')
+    localStorage.setItem(`scan-ch-${ch}`, 'open')
+  }
+  block.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  block.classList.add('highlight')
+  setTimeout(() => block.classList.remove('highlight'), 1600)
 })
 
 // ===== SERVICES SCAN LIST =====
@@ -630,12 +821,20 @@ function renderServicesScanList(results) {
   withServices.forEach(r => {
     const block = document.createElement('div')
     block.className = 'svc-scan-channel'
+    block.dataset.ch = r.ch
     const isOpen = localStorage.getItem(`scan-ch-${r.ch}`) !== 'closed'
     const header = document.createElement('div')
     header.className = 'svc-scan-channel-header'
+    const subParts = []
+    if (r.ensemble)   subParts.push(r.ensemble + (r.ecc ? ` (ECC ${r.ecc})` : ''))
+    if (r.signal)     subParts.push(`${r.signal.toFixed(1)} dB\u00b5V`)
+    if (r.cnr)        subParts.push(`CNR ${r.cnr.toFixed(0)}`)
+    if (r.snr !== undefined && r.snr !== 0) subParts.push(`SNR ${r.snr.toFixed(0)}`)
+    if (r.fiberr)     subParts.push(`FIB err ${r.fiberr}`)
     header.innerHTML = `
       <div>
         <div class="svc-scan-channel-name">${r.name}</div>
+        ${subParts.length ? `<div class="svc-scan-channel-sub">${subParts.join(' \u00b7 ')}</div>` : ''}
       </div>
       <span class="svc-scan-channel-toggle ${isOpen ? 'open' : ''}">&#9658;</span>
     `
@@ -644,8 +843,9 @@ function renderServicesScanList(results) {
     r.services.forEach(svc => {
       const item = document.createElement('div')
       item.className = 'svc-scan-item'
-      item.textContent = svc.name
-      item.title = svc.name
+      const modeName = SERVICE_MODES[String(svc.type)] || ''
+      item.innerHTML = `${svc.name}${modeName ? ` <span class="svc-type">${modeName}</span>` : ''}`
+      item.title = svc.name + (modeName ? ` (${modeName})` : '')
       item.dataset.ch = r.ch
       item.dataset.svcId = svc.id
       item.onclick = () => tuneToService(r.ch, svc.id)
@@ -691,7 +891,6 @@ function expandSlideshow() {
 
 
 window.addEventListener('pagehide', () => {
-  if (audioWs) audioWs.Socket.close()
   if (socket) socket.close()
 })
 

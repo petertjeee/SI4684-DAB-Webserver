@@ -63,14 +63,19 @@ async function startScan(ws) {
 
     const result = {
       ch,
-      name:     DAB_CHANNELS[ch].name,
-      freq:     DAB_CHANNELS[ch].freq,
-      signal:   sig,
+      name:       DAB_CHANNELS[ch].name,
+      freq:       DAB_CHANNELS[ch].freq,
+      signal:     sig,
       lock,
-      ensemble: lock ? (state.ensembleName || null) : null,
-      services: lock ? state.servicesList
-        .filter(s => AUDIO_MODES.includes(s.type))
-        .map(s => ({ id: s.id, name: s.name, type: s.type })) : []
+      cnr:        lock ? (parseFloat(state.signal?.CNR) || 0) : 0,
+      snr:        lock ? (parseFloat(state.signal?.SNR) || 0) : 0,
+      fic:        lock ? (parseFloat(state.signal?.FIC) || 0) : 0,
+      fiberr:     lock ? (parseInt(state.debug?.FIBERR) || 0) : 0,
+      ensemble:   lock ? (state.ensembleName || null) : null,
+      ensembleId: lock ? (state.ensemble || null) : null,
+      ecc:        lock ? (state.ecc || null) : null,
+      services:   lock ? state.servicesList
+        .map(s => ({ id: s.id, name: s.name, short: s.short, type: s.type })) : []
     }
     results.push(result)
     broadcast({ type: 'scanProgress', ch, total: 37, result })
@@ -92,6 +97,12 @@ async function startScan(ws) {
         state.scanResults[i].services   = r.services
         state.scanResults[i].lock       = true
         state.scanResults[i].ensemble   = r.ensemble
+        state.scanResults[i].ensembleId = r.ensembleId
+        state.scanResults[i].ecc        = r.ecc
+        state.scanResults[i].cnr        = r.cnr
+        state.scanResults[i].snr        = r.snr
+        state.scanResults[i].fic        = r.fic
+        state.scanResults[i].fiberr     = r.fiberr
       }
     }
   }

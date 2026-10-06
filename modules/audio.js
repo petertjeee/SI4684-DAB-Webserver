@@ -60,14 +60,15 @@ function startAudio() {
       '-f', 'S16_LE',
       '-r', String(config.audio.sampleRate),
       '-c', String(config.audio.channels),
+      '--buffer-time=1000000',
+      '--period-time=20000',
       '-t', 'raw'
     ])
 
     ffmpeg = spawn('ffmpeg', [
-      '-fflags', '+nobuffer+flush_packets',
-      '-flags', 'low_delay',
-      '-rtbufsize', '32',
-      '-probesize', '32',
+      '-hide_banner',
+      '-loglevel', 'warning',
+      '-thread_queue_size', '512',
       '-f', 's16le',
       '-ar', String(config.audio.sampleRate),
       '-ac', String(config.audio.channels),
@@ -79,14 +80,14 @@ function startAudio() {
       '-f', 'mp3',
       '-write_xing', '0',
       '-id3v2_version', '0',
-      '-fflags', '+nobuffer',
       '-flush_packets', '1',
       'pipe:1'
     ])
 
     arecord.stdout.pipe(ffmpeg.stdin)
+    arecord.stderr.on('data', d => warn(`arecord: ${d.toString().trim()}`))
     ffmpeg.stdout.on('data', chunk => audioEmitter.emit('chunk', chunk))
-    ffmpeg.stderr.on('data', () => {})
+    ffmpeg.stderr.on('data', d => warn(`ffmpeg: ${d.toString().trim()}`))
 
     function cleanup(reason) {
       if (!audioRunning) return

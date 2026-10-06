@@ -9,44 +9,45 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="DAB Radio">
-  <meta name="theme-color" content="#00d2ff">
+  <meta name="theme-color" content="#202228">
 
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:ital,wght@0,200;0,300;0,400;0,600;0,700;0,900;1,200;1,300;1,400;1,600;1,700&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
 
-<!-- HEADER -->
-<div class="header">
-  <div class="header-logo">Si4684 <span>DAB Webserver</span></div>
-  <div class="header-status">
-    <span id="headerEnsemble">-</span>
-    <span>|</span>
-    <span id="headerTune"> - </span>
-    <span id="connectionCount">-</span>
-  </div>
-</div>
-<div class="scan-overlay" id="scanOverlay">
-  <div class="scan-overlay-text">SCAN IN PROGRESS</div>
-  <div class="scan-overlay-sub" id="scanOverlaySub">Please wait...</div>
-</div>
+<div class="wrapper-outer">
 
-<!-- LAYOUT -->
-<div class="layout">
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <h1 id="tunerName">Si4684 <span class="color-bright">DAB+</span></h1>
+    <div class="topbar-status">
+      <span id="headerEnsemble" class="text-small">-</span>
+      <span class="topbar-sep"></span>
+      <span id="headerTune" class="text-small text-monospace">-</span>
+      <span class="topbar-sep"></span>
+      <span id="connectionCount" class="text-small">-</span>
+    </div>
+  </div>
+
+  <div class="scan-overlay" id="scanOverlay">
+    <div class="scan-overlay-text">SCAN IN PROGRESS</div>
+    <div class="scan-overlay-sub" id="scanOverlaySub">Please wait...</div>
+  </div>
 
   <!-- SIGNAL GRAPH - full width -->
-  <div class="signal-graph-wrap" style="grid-column: 1 / -1;">
-    <div class="signal-graph-header">
-      <div class="signal-graph-title">Signal Strength</div>
-      <div class="signal-graph-value" id="signalBig">-<span>dBuV</span></div>
-    </div>
+  <div class="panel w-100 m-0 canvas-panel">
+    <div class="canvas-title"><span>Signal Strength</span><span class="text-small text-monospace" id="signalGraphVal"></span></div>
     <canvas id="signalCanvas" height="70"></canvas>
   </div>
 
-  <!-- SCANNER - full width -->
-  <div class="panel scan-panel" style="grid-column: 1 / -1;">
-    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;">
-      <div class="panel-title" style="margin-bottom:0;">Band Scan</div>
-      <div style="display:flex; align-items:center; gap:10px;">
+  <!-- BAND SCAN - full width -->
+  <div class="panel w-100 m-0">
+    <div class="scan-head">
+      <h2 style="margin-bottom:0;">Band Scan</h2>
+      <div class="scan-head-right">
         <span class="scan-status" id="scanStatus"></span>
         <button class="btn" id="scanBtn" onclick="toggleScan()">Scan</button>
       </div>
@@ -56,115 +57,135 @@
     </div>
   </div>
 
-  <!-- COL LEFT -->
-  <div class="col-left" style="display:flex; flex-direction:column; gap:16px;">
-
-    <!-- TUNE -->
-    <div class="panel">
-      <div class="panel-title">Frequency</div>
-      <div class="tune-big">
-        <div class="tune-channel" id="tuneChannel">-</div>
-        <div class="tune-freq" id="tuneFreq">-<span>MHz</span></div>
+  <!-- ROW: NOW PLAYING + SERVICES -->
+  <div class="flex-row">
+    <div class="panel w-75 m-0 hover-brighten station-panel" id="pcControls">
+      <div class="station-flex">
+        <div class="station-left">
+          <div class="station-top">
+            <button class="play-btn" onclick="togglePlay()" aria-label="Play / Stop">
+              <svg class="pc-icon-play" width="18" height="18" viewBox="0 0 24 24" fill="#202228">
+                <polygon points="5,3 19,12 5,21"/>
+              </svg>
+              <svg class="pc-icon-pause" width="18" height="18" viewBox="0 0 24 24" fill="#202228">
+                <rect x="5" y="3" width="4" height="18" rx="1"/>
+                <rect x="15" y="3" width="4" height="18" rx="1"/>
+              </svg>
+            </button>
+            <div class="station-info">
+              <div class="now-playing-label">Now Playing</div>
+              <div class="station-name" id="pcStationTitle">-</div>
+              <div class="station-ensemble" id="pcEnsembleName">-</div>
+              <span class="audio-type-badge" id="pcAudioType">-</span>
+            </div>
+          </div>
+          <div class="vol-row">
+            <svg class="vol-icon" id="pcVolIcon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" onclick="toggleMute()">
+              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
+            </svg>
+            <input type="range" class="vol-slider" id="pcVolSlider" min="0" max="100" value="100" style="--vol:100%" oninput="updateVolume(this.value)">
+            <span class="vol-value text-monospace" id="pcVolValue">100</span>
+          </div>
+        </div>
+        <div class="vu-block">
+          <div class="vu-meters">
+            <div class="vcol">
+              <div class="ovl" id="vuOvl0">OVL</div>
+              <div class="vmeter" id="vuM0"></div>
+              <span class="vv" id="vuV0">-</span>
+            </div>
+            <div class="vscale" id="vuScale"></div>
+            <div class="vcol">
+              <div class="ovl" id="vuOvl1">OVL</div>
+              <div class="vmeter" id="vuM1"></div>
+              <span class="vv" id="vuV1">-</span>
+            </div>
+          </div>
+          <div class="corr">
+            <span>-1</span>
+            <div class="corrtr"><div class="corrmark" id="vuCorrMark"></div></div>
+            <span>+1</span>
+          </div>
+        </div>
+        <img id="slideshow" src="" alt="" onclick="expandSlideshow()">
       </div>
+      <div class="rt-box">
+        <h2 style="margin-top:0;">Radiotext</h2>
+        <div class="rt-text" id="pcRtText">No data</div>
+        <div id="dlPlusBox" style="display:none; margin-top:10px; border-top:1px solid var(--color-2); padding-top:8px;">
+          <h2 style="margin-top:0;">DL+</h2>
+          <div class="rt-text" id="dlPlusText"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SERVICES -->
+    <div class="panel w-33 m-0 services-panel">
+      <h2>Services</h2>
+      <div id="servicesScanList"></div>
+    </div>
+  </div>
+
+  <!-- ROW: ENSEMBLE / FREQUENCY / SIGNAL -->
+  <div class="flex-row">
+    <div class="panel w-33 m-0">
+      <h2>Ensemble</h2>
+      <div class="ensemble-name" id="ensemble">-</div>
+      <div class="ensemble-id text-monospace" id="ensembleId">-</div>
+      <div class="lock-indicator" style="margin-top:10px;">
+        <div class="lock-dot" id="lock"></div>
+        <span class="lock-label" id="lockLabel">No Lock</span>
+      </div>
+      <div class="flags-meta text-small" id="ensembleMeta"></div>
+      <select id="services" style="display:none"></select>
+    </div>
+    <div class="panel w-33 m-0">
+      <h2>Frequency</h2>
+      <div class="tune-channel" id="tuneChannel">-</div>
+      <div class="tune-freq text-monospace" id="tuneFreq">-<span>MHz</span></div>
       <div class="tune-controls">
         <select id="tuneSelect"></select>
         <button class="btn" onclick="changeTune()">Tune</button>
       </div>
     </div>
-
-    <!-- ENSEMBLE -->
-    <div class="panel">
-      <div class="panel-title">Ensemble</div>
-      <div class="ensemble-name" id="ensemble">-</div>
-      <div class="ensemble-id" id="ensembleId">-</div>
-      <select id="services" style="display:none"></select>
-    <!-- SIGNAL STATUS -->
-      <div class="divider"></div>
-      <div class="lock-row">
-        <div class="panel-title" style="margin-bottom:0;">Signal Status</div>
-        <div class="lock-indicator">
-          <span class="lock-label" id="lockLabel">No Lock</span>
-          <div class="lock-dot" id="lock"></div>
-        </div>
-      </div>
-      <div class="divider"></div>
+    <div class="panel w-33 m-0">
+      <h2>Signal</h2>
+      <div class="text-big text-monospace" id="signalBig">-<span class="text-medium">dB&#181;V</span></div>
       <div class="signal-section">
         <div class="sig-row">
           <div class="sig-label">MER</div>
           <div class="sig-bar-wrap"><div class="sig-bar-fill" id="cnr"></div></div>
-          <div class="sig-value" id="cnrVal">-</div>
+          <div class="sig-value text-monospace" id="cnrVal">-</div>
         </div>
         <div class="sig-row">
-          <div class="sig-label">QUALITY</div>
+          <div class="sig-label">FIC</div>
           <div class="sig-bar-wrap"><div class="sig-bar-fill" id="fic"></div></div>
-          <div class="sig-value" id="ficVal">-</div>
+          <div class="sig-value text-monospace" id="ficVal">-</div>
+        </div>
+        <div class="sig-row">
+          <div class="sig-label">SNR</div>
+          <div class="sig-bar-wrap"><div class="sig-bar-fill" id="snr"></div></div>
+          <div class="sig-value text-monospace" id="snrVal">-</div>
+        </div>
+        <div class="sig-row">
+          <div class="sig-label">RSSI</div>
+          <div class="sig-bar-wrap"><div class="sig-bar-fill" id="rssi"></div></div>
+          <div class="sig-value text-monospace" id="rssiVal">-</div>
+        </div>
+        <div class="sig-row">
+          <div class="sig-label">FIB ERR</div>
+          <div class="sig-value text-monospace" id="fiberrVal" style="text-align:left;">-</div>
         </div>
       </div>
     </div>
-  </div>
-  <!-- COL CENTER - PLAYER -->
-  <div class="col-center">
-    <div class="player-panel" id="pcControls">
-      <!-- ROW 1: 2 COL - INFO + Slideshow -->
-      <div style="display:flex; gap:16px; align-items:stretch;">
-        <!-- COL 1: play + info -->
-        <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
-          <div style="display:flex; align-items:center; gap:16px;">
-            <button class="play-btn" onclick="togglePlay()">
-              <svg class="pc-icon-play" width="18" height="18" viewBox="0 0 24 24" fill="#080e14">
-                <polygon points="5,3 19,12 5,21"/>
-              </svg>
-              <svg class="pc-icon-pause" width="18" height="18" viewBox="0 0 24 24" fill="#080e14">
-                <rect x="5" y="3" width="4" height="18" rx="1"/>
-                <rect x="15" y="3" width="4" height="18" rx="1"/>
-              </svg>
-            </button>
-            <div>
-              <div class="now-playing-label">Now Playing</div>
-              <div class="station-name" id="pcStationTitle">-</div>
-              <div class="station-ensemble" id="pcEnsembleName">-</div>
-              <div class="audio-type-badge" id="pcAudioType">-</div>
-            </div>
-          </div>
-          <div class="vol-row">
-            <svg class="vol-icon" id="pcVolIcon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" onclick="toggleMute()" style="cursor:pointer;">
-              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z"/>
-            </svg>
-            <input type="range" class="vol-slider" id="pcVolSlider" min="0" max="100" value="50" oninput="updateVolume(this.value)">
-            <span class="vol-value" id="pcVolValue">80</span>
-          </div>
-        </div>
-        <!-- COL 2: Slideshow -->
-        <div style="flex-shrink:0;">
-          <img id="slideshow" src="" alt="" onclick="expandSlideshow()" style="width:200px; height:150px; object-fit:cover; border-radius:8px; cursor:pointer; box-shadow:0 0 10px rgba(0,210,255,0.2); display:block;">
-        </div>
-      </div>
-      <!-- ROW 2: Radio Text -->
-      <div class="rt-box" style="margin-top:12px;">
-        <div class="rt-label">Radio Text</div>
-        <div class="rt-text" id="pcRtText">No data</div>
-      </div>
-      <!-- ROW 3: Service Info -->
+    <div class="panel w-33 m-0">
+      <h2>Service Info</h2>
       <div id="serviceInfo" class="svc-info-grid"></div>
     </div>
   </div>
 
-<!-- COL SERVICES -->
-  <div class="col-services" style="display:flex; flex-direction:column; gap:16px; position: sticky; top: 60px; max-height: 378px;">
-    <div class="panel" style="flex:1; overflow-y:auto;">
-      <div class="panel-title">Services</div>
-      <div id="servicesScanList"></div>
-    </div>
-  </div>
 </div>
 
-<script src="js/player/3las.helpers.js"></script>
-<script src="js/player/3las.logging.js"></script>
-<script src="js/player/3las.formatreader.js"></script>
-<script src="js/player/3las.formatreader.mpeg.js"></script>
-<script src="js/player/3las.liveaudioplayer.js"></script>
-<script src="js/player/3las.websocketclient.js"></script>
-<script src="js/player/3las.fallback.js"></script>
 <script src="/js/constants.js"></script>
 <script src="/js/main.js"></script>
 </body>
