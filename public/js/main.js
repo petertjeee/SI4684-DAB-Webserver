@@ -1034,7 +1034,7 @@ if (location.search.includes('laydbg')) setTimeout(() => {
   const r = s => { const e = document.querySelector(s); return e ? Math.round(e.getBoundingClientRect().height) : 'x' }
   const css = getComputedStyle(document.querySelector('.vu-block'))
   document.title = 'UA:' + navigator.userAgent.split(') ').pop() +
-    ' | panel=' + r('.station-panel') + ' split=' + r('.station-split') + ' vublock=' + r('.vu-block') +
+    ' | panel=' + r('.station-panel') + ' svc=' + r('.services-panel') + ' split=' + r('.station-split') + ' vublock=' + r('.vu-block') +
     ' vumeters=' + r('.vu-meters') + ' rt=' + r('.rt-box') +
     ' | vupos=' + css.position + ' fs=' + css.flexDirection
 }, 3000)

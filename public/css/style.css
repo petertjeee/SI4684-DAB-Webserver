@@ -136,7 +136,7 @@ h2 {
 #signalCanvas { width: 100%; display: block; }
 
 /* ===== STATION / PLAYER ===== */
-.station-panel { min-height: 130px; display: flex; flex-direction: column; }
+.station-panel { min-height: 130px; max-height: 420px; display: flex; flex-direction: column; }
 
 .station-split {
   display: flex;
@@ -147,7 +147,7 @@ h2 {
   min-height: 0;
 }
 
-.panel-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.panel-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 
 .station-flex {
   display: flex;
@@ -528,7 +528,7 @@ h2 {
   padding-top: 10px;
   border-top: 1px solid var(--color-2);
   flex: 1;
-  min-height: 222px;
+  min-height: 80px;
   overflow-y: auto;
   scrollbar-width: none;
 }
