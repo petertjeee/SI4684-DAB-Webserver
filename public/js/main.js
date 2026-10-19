@@ -537,6 +537,10 @@ function handleMessage(msg) {
       if (msg.mode) applyMode(msg.mode)
       if (msg.fmFreq) setFmFreq(msg.fmFreq)
       if (msg.fmBandscan) { fmScan = msg.fmBandscan; drawFmScan() }
+      if (msg.deemph !== undefined && msg.deemph !== null) {
+        const sel = document.getElementById('deemphSelect')
+        if (sel) sel.value = String(msg.deemph)
+      }
       const FM_STATE_KEYS = { fmPI:'pi', fmPS:'ps', fmRT:'rt', fmAF:'af', fmTP:'tp', fmTA:'ta', fmMS:'ms', fmPTY:'pty', fmPTYN:'ptyn', fmECC:'ecc', fmDI:'di' }
       Object.keys(FM_STATE_KEYS).forEach(sk => {
         if (msg[sk] !== undefined && msg[sk] !== null) fmRds[FM_STATE_KEYS[sk]] = msg[sk]
@@ -715,6 +719,8 @@ function handleMessage(msg) {
     // ===== FM =====
     case 'mode':
       applyMode(msg.data)
+      // niets om te herstellen → knop mag niet "speelt af" suggereren
+      if (!msg.restoreService && isPlaying) togglePlay()
       break
 
     case 'fmSignal':
@@ -803,6 +809,11 @@ function handleMessage(msg) {
 
     case 'fmRdsClear':
       fmRdsClearFields()
+      break
+
+    case 'deemph':
+      const dsel = document.getElementById('deemphSelect')
+      if (dsel) dsel.value = String(msg.data)
       break
 
     case 'connectionCount':
@@ -948,6 +959,11 @@ function renderServiceInfo(info) {
 // ===== SCANNER =====
 let scanResults = []
 let scanRunning = false
+// FM state — boven de top-level calls gedeclareerd (TDZ)
+let radioMode = 'dab'
+let fmFreqKhz = null
+let fmScan = null
+const fmRds = { pi: null, ps: null, rt: null, af: [], tp: null, ta: null, ms: null, pty: null, ptyn: null, ecc: null, di: null }
 const scanCanvas = document.getElementById('scanCanvas')
 const scanCtx = scanCanvas.getContext('2d')
 
@@ -983,6 +999,7 @@ function toggleScan() {
 }
 
 function drawScanChart(results) {
+  if (radioMode === 'fm') { drawFmScan(); return }
   const W = scanCanvas.width
   const H = scanCanvas.height
   scanCtx.clearRect(0, 0, W, H)
@@ -1060,11 +1077,6 @@ scanCanvas.addEventListener('click', e => {
 if (document.fonts?.ready) document.fonts.ready.then(() => drawScanChart(scanResults))
 
 // ===== FM MODE =====
-let radioMode = 'dab'
-let fmFreqKhz = null
-let fmScan = null
-const fmRds = { pi: null, ps: null, rt: null, af: [], tp: null, ta: null, ms: null, pty: null, ptyn: null, ecc: null, di: null }
-
 function setRadioMode(mode) {
   if (mode === radioMode) return
   wsSend({ type: 'setMode', mode })
@@ -1072,6 +1084,7 @@ function setRadioMode(mode) {
 
 function applyMode(mode) {
   radioMode = mode
+  document.body.classList.toggle('fm-mode', mode === 'fm')
   document.querySelectorAll('.dab-only').forEach(e => { e.style.display = mode === 'fm' ? 'none' : '' })
   document.querySelectorAll('.fm-only').forEach(e => { e.style.display = mode === 'fm' ? '' : 'none' })
   document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode))
@@ -1079,11 +1092,16 @@ function applyMode(mode) {
     ? 'Si4684 <span class="color-bright">FM</span>'
     : 'Si4684 <span class="color-bright">DAB+</span>'
   const st = document.getElementById('scanStatus')
+  const stTitle = document.getElementById('scanTitle')
+  if (stTitle) stTitle.textContent = mode === 'fm' ? 'FM Band' : 'Band Scan'
   if (mode === 'fm') {
-    st.textContent = fmScan ? 'FM band' : ''
+    st.textContent = fmScan ? `FM band \u00b7 ${fmScan.rssi.length} pts` : ''
     drawFmScan()
   } else {
     st.textContent = ''
+    // door FM aangeraakte velden resetten tot echte DAB-data binnenkomt
+    document.getElementById('headerTune').textContent = '-'
+    document.getElementById('pcEnsembleName').textContent = '-'
     drawScanChart(scanResults)
   }
 }
@@ -1094,10 +1112,12 @@ function setFmFreq(khz) {
   fmFreqKhz = khz
   const mhz = fmMhz(khz)
   document.getElementById('fmFreqBig').innerHTML = mhz + '<span>MHz</span>'
+  if (radioMode !== 'fm') return
   document.getElementById('headerTune').textContent = mhz + ' MHz'
   const inp = document.getElementById('fmFreqInput')
   if (document.activeElement !== inp) inp.value = mhz
   updateFmStation()
+  if (radioMode === 'fm' && fmScan) drawFmScan()
 }
 
 function fmStep(deltaKhz) {
@@ -1116,6 +1136,10 @@ function fmTuneInput() {
 
 function fmSeek(dir) {
   wsSend({ type: 'fmSeek', direction: dir })
+}
+
+function setDeemph(val) {
+  wsSend({ type: 'setDeemph', value: parseInt(val) })
 }
 
 function updateFmSignal(data) {
@@ -1150,6 +1174,7 @@ function updateFmSignal(data) {
 }
 
 function updateFmStation() {
+  if (radioMode !== 'fm') return
   const ps = fmRds.ps && fmRds.ps.trim()
   document.getElementById('pcStationTitle').textContent = ps || (fmFreqKhz ? fmMhz(fmFreqKhz) + ' MHz' : '-')
   document.getElementById('pcEnsembleName').textContent = fmFreqKhz ? fmMhz(fmFreqKhz) + ' MHz' : '-'
@@ -1168,7 +1193,16 @@ function renderFmRdsInfo() {
     if (k === 'pty') d = getPtyLabel(v)
     if (k === 'ms')  d = v === 1 ? 'Music' : 'Speech'
     if (k === 'tp' || k === 'ta') d = v ? 'On' : 'Off'
-    if (k === 'di')  d = typeof v === 'object' ? JSON.stringify(v) : v
+    if (k === 'di') {
+      if (typeof v === 'object' && v !== null) {
+        const flags = []
+        if (v.stereo)        flags.push('Stereo')
+        if (v.dynamicPty)    flags.push('Dyn PTY')
+        if (v.compressed)    flags.push('Compressed')
+        if (v.artificialHead) flags.push('Art. head')
+        d = flags.join(', ') || 'Mono'
+      }
+    }
     rows.push(`<div class="svc-info-row"><div class="svc-info-label">${RDS_INFO_LABELS[k]}</div><div class="svc-info-value">${d}</div></div>`)
   }
   fmt('pi', fmRds.pi); fmt('pty', fmRds.pty); fmt('ptyn', fmRds.ptyn)
@@ -1229,12 +1263,32 @@ function drawFmScan() {
   }
   scanCtx.fillStyle = '#ffffff'
   scanCtx.font = '11px "Roboto Mono", monospace'
-  scanCtx.textAlign = 'center'
   const lo = fmScan.start / 1000, hi = fmScan.stop / 1000
   scanCtx.textAlign = 'left'
   scanCtx.fillText(lo.toFixed(1), 4, 12)
   scanCtx.textAlign = 'right'
   scanCtx.fillText(hi.toFixed(1), W - 4, 12)
+
+  // frequentielabels op de sterkste lokale pieken
+  const peaks = []
+  for (let i = 1; i < n - 1; i++) {
+    const s = fmScan.rssi[i] || 0
+    if (s >= 10 && s >= (fmScan.rssi[i-1] || 0) && s >= (fmScan.rssi[i+1] || 0)) peaks.push({ i, s })
+  }
+  peaks.sort((a, b) => b.s - a.s)
+  const chosen = []
+  for (const p of peaks) {
+    if (chosen.length >= 8) break
+    if (chosen.every(c => Math.abs(c.i - p.i) * barW > 42)) chosen.push(p)
+  }
+  scanCtx.fillStyle = '#ffffffcc'
+  scanCtx.font = '10px "Roboto Mono", monospace'
+  scanCtx.textAlign = 'center'
+  chosen.forEach(p => {
+    const f = (fmScan.start + p.i * fmScan.step) / 1000
+    scanCtx.fillText(f.toFixed(1), p.i * barW + barW / 2, 12)
+  })
+
   if (fmFreqKhz >= fmScan.start && fmFreqKhz <= fmScan.stop) {
     const x = (fmFreqKhz - fmScan.start) / (fmScan.stop - fmScan.start) * W
     scanCtx.strokeStyle = '#e53935'

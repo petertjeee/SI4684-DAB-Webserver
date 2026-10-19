@@ -64,6 +64,7 @@ const state = {
   fmECC:       null,
   fmRTPlus:    null,
   fmDI:        null,
+  deemph:      50,
   _cachedServicesList: null
 }
 

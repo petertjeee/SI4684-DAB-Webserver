@@ -112,92 +112,95 @@ const setupHTML = `<!DOCTYPE html>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DAB Webserver — Setup</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:ital,wght@0,200;0,300;0,400;0,600;0,700;0,900;1,200;1,300;1,400;1,600;1,700&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;600;800&display=swap');
-
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #080e14;
-      --surface: #0d1821;
-      --surface2: #111c27;
-      --border: #1a2d42;
-      --accent: #00d2ff;
-      --accent2: #0077aa;
-      --text: #c8dce8;
-      --muted: #4a6478;
-      --success: #00e676;
-      --error: #ff5252;
+      --color-main: rgb(32, 34, 40);
+      --color-main-bright: rgb(88, 219, 171);
+      --color-text: rgb(255, 255, 255);
+      --color-1: color-mix(in srgb, var(--color-main) 95%, var(--color-main-bright));
+      --color-2: color-mix(in srgb, var(--color-main) 75%, var(--color-main-bright));
+      --color-3: color-mix(in srgb, var(--color-main) 50%, var(--color-main-bright));
+      --color-4: color-mix(in srgb, var(--color-main) 20%, var(--color-main-bright));
+      --color-1-transparent: color-mix(in srgb, var(--color-1), transparent 40%);
+      --color-2-transparent: color-mix(in srgb, var(--color-2), transparent 40%);
+      --border: color-mix(in srgb, var(--color-2), transparent 30%);
+      --muted: var(--color-4);
+      --accent: var(--color-main-bright);
+      --success: #58dbab;
+      --error: #ff5776;
       --warn: #ffab40;
     }
 
     body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: 'JetBrains Mono', monospace;
+      background: var(--color-main);
+      color: var(--color-text);
+      font-family: 'Titillium Web', sans-serif;
       min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 40px 20px;
+      padding: 30px 20px 50px;
     }
 
-    body::before {
-      content: '';
-      position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: 
-        radial-gradient(ellipse 600px 400px at 20% 10%, rgba(0,120,180,0.07) 0%, transparent 70%),
-        radial-gradient(ellipse 400px 300px at 80% 80%, rgba(0,210,255,0.05) 0%, transparent 70%);
-      pointer-events: none;
-      z-index: 0;
-    }
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--color-1); }
+    ::-webkit-scrollbar-thumb { background: var(--color-2); border-radius: 3px; }
 
     .wrap {
-      position: relative;
-      z-index: 1;
       width: 100%;
       max-width: 720px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
     }
 
-    header {
-      margin-bottom: 40px;
-      border-left: 3px solid var(--accent);
-      padding-left: 16px;
+    .topbar {
+      background: var(--color-1-transparent);
+      backdrop-filter: blur(5px);
+      border-radius: 15px;
+      min-height: 64px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
     }
 
-    header h1 {
-      font-family: 'Syne', sans-serif;
-      font-size: 28px;
-      font-weight: 800;
-      color: #fff;
-      letter-spacing: -0.5px;
+    .topbar h1 {
+      font-size: 26px;
+      font-weight: 600;
+      letter-spacing: 1px;
     }
 
-    header h1 span { color: var(--accent); }
+    .topbar h1 span { color: var(--accent); }
 
-    header p {
+    .topbar a {
       color: var(--muted);
-      font-size: 12px;
-      margin-top: 6px;
+      text-decoration: none;
+      font-size: 14px;
+      transition: color 0.2s;
     }
+
+    .topbar a:hover { color: var(--accent); }
 
     .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 24px;
-      margin-bottom: 20px;
+      background: var(--color-1-transparent);
+      backdrop-filter: blur(5px);
+      border-radius: 15px;
+      padding: 14px 18px;
     }
 
     .card-title {
-      font-family: 'Syne', sans-serif;
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 2px;
-      color: var(--accent);
-      margin-bottom: 18px;
+      letter-spacing: 1.5px;
+      opacity: 0.85;
+      margin: 4px 0 14px;
       display: flex;
       align-items: center;
       gap: 10px;
@@ -221,29 +224,33 @@ const setupHTML = `<!DOCTYPE html>
 
     select, input {
       width: 100%;
-      background: var(--surface2);
+      background: var(--color-2-transparent);
       border: 1px solid var(--border);
-      border-radius: 6px;
-      color: var(--text);
-      font-family: 'JetBrains Mono', monospace;
+      border-radius: 8px;
+      color: var(--color-text);
+      font-family: 'Roboto Mono', monospace;
       font-size: 13px;
       padding: 10px 14px;
       outline: none;
-      transition: border-color 0.2s;
+      transition: border-color 0.2s, background-color 0.2s;
       margin-bottom: 16px;
       appearance: none;
       -webkit-appearance: none;
     }
 
     select {
-      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%234a6478' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%2358dbab' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
       background-repeat: no-repeat;
       background-position: right 14px center;
       padding-right: 36px;
+      cursor: pointer;
     }
 
+    select option { background: var(--color-1); }
+
     select:focus, input:focus {
-      border-color: var(--accent2);
+      border-color: var(--accent);
+      background: var(--color-2-transparent);
     }
 
     .row2 {
@@ -254,19 +261,18 @@ const setupHTML = `<!DOCTYPE html>
 
     .btn {
       background: var(--accent);
-      color: #080e14;
+      color: var(--color-main);
       border: none;
-      border-radius: 6px;
+      border-radius: 8px;
       padding: 12px 28px;
-      font-family: 'Syne', sans-serif;
-      font-size: 13px;
+      font-family: 'Titillium Web', sans-serif;
+      font-size: 14px;
       font-weight: 700;
       letter-spacing: 1px;
       text-transform: uppercase;
       cursor: pointer;
       transition: opacity 0.2s, transform 0.1s;
       width: 100%;
-      margin-top: 8px;
     }
 
     .btn:hover { opacity: 0.85; }
@@ -276,21 +282,19 @@ const setupHTML = `<!DOCTYPE html>
     .btn-secondary {
       background: transparent;
       border: 1px solid var(--border);
-      color: var(--text);
-      margin-top: 0;
+      color: var(--color-text);
       width: auto;
-      padding: 8px 16px;
-      font-size: 11px;
+      padding: 7px 16px;
+      font-size: 12px;
+      font-weight: 600;
     }
 
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); opacity: 1; }
+
     .current-config {
-      background: var(--surface2);
-      border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 14px;
+      font-family: 'Roboto Mono', monospace;
       font-size: 12px;
       color: var(--muted);
-      margin-bottom: 16px;
     }
 
     .current-config span { color: var(--accent); }
@@ -299,11 +303,11 @@ const setupHTML = `<!DOCTYPE html>
       position: fixed;
       bottom: 30px;
       right: 30px;
-      background: var(--surface);
+      background: var(--color-1);
       border: 1px solid var(--border);
-      border-radius: 8px;
+      border-radius: 10px;
       padding: 14px 20px;
-      font-size: 13px;
+      font-size: 14px;
       display: none;
       align-items: center;
       gap: 10px;
@@ -324,8 +328,8 @@ const setupHTML = `<!DOCTYPE html>
 
     .badge {
       display: inline-block;
-      background: rgba(0,210,255,0.1);
-      border: 1px solid rgba(0,210,255,0.2);
+      background: rgba(88,219,171,0.12);
+      border: 1px solid rgba(88,219,171,0.3);
       color: var(--accent);
       border-radius: 4px;
       padding: 2px 8px;
@@ -340,15 +344,15 @@ const setupHTML = `<!DOCTYPE html>
       margin-bottom: 16px;
     }
 
-    .current-val span { color: var(--warn); }
+    .current-val span { color: var(--warn); font-family: 'Roboto Mono', monospace; }
   </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
+  <div class="topbar">
     <h1>Si4684 <span>Setup</span></h1>
-    <p>Configure serial port and audio device — saved to config.json</p>
-  </header>
+    <a href="/">← Receiver</a>
+  </div>
 
   <div class="card">
     <div class="card-title">Current Config</div>
@@ -522,18 +526,22 @@ const loginHTML = `<!DOCTYPE html>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DAB Webserver — Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:ital,wght@0,200;0,300;0,400;0,600;0,700;0,900;1,200;1,300;1,400;1,600;1,700&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root { --bg:#080e14; --surface:#0d1821; --border:#1a2d42; --accent:#00d2ff; --text:#c8dce8; --muted:#4a6478; --error:#ff5252; }
-    body { background:var(--bg); color:var(--text); font-family:'JetBrains Mono',monospace; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
-    .card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:32px; width:100%; max-width:380px; }
-    h1 { font-size:20px; font-weight:700; color:#fff; margin-bottom:6px; }
+    :root { --bg:rgb(32,34,40); --bright:rgb(88,219,171); --surface:color-mix(in srgb, rgb(32,34,40) 95%, rgb(88,219,171)); --surface2:color-mix(in srgb, rgb(32,34,40) 75%, rgb(88,219,171)); --border:color-mix(in srgb, color-mix(in srgb, rgb(32,34,40) 75%, rgb(88,219,171)), transparent 30%); --muted:color-mix(in srgb, rgb(32,34,40) 20%, rgb(88,219,171)); --accent:var(--bright); --text:#fff; --error:#ff5776; }
+    body { background:var(--bg); color:var(--text); font-family:'Titillium Web',sans-serif; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+    .card { background:color-mix(in srgb, var(--surface), transparent 40%); backdrop-filter:blur(5px); border-radius:15px; padding:32px; width:100%; max-width:380px; }
+    h1 { font-size:24px; font-weight:600; color:#fff; margin-bottom:6px; letter-spacing:1px; }
     h1 span { color:var(--accent); }
-    p { color:var(--muted); font-size:12px; margin-bottom:24px; }
+    p { color:var(--muted); font-size:13px; margin-bottom:24px; }
     label { display:block; font-size:11px; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:1px; }
-    input { width:100%; background:#111c27; border:1px solid var(--border); border-radius:6px; color:var(--text); font-family:'JetBrains Mono',monospace; font-size:13px; padding:10px 14px; outline:none; margin-bottom:16px; }
+    input { width:100%; background:color-mix(in srgb, var(--surface2), transparent 40%); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:'Roboto Mono',monospace; font-size:13px; padding:10px 14px; outline:none; margin-bottom:16px; }
     input:focus { border-color:var(--accent); }
-    button { width:100%; background:var(--accent); color:#080e14; border:none; border-radius:6px; padding:12px; font-size:13px; font-weight:700; cursor:pointer; text-transform:uppercase; letter-spacing:1px; }
+    button { width:100%; background:var(--accent); color:var(--bg); border:none; border-radius:8px; padding:12px; font-family:'Titillium Web',sans-serif; font-size:14px; font-weight:700; cursor:pointer; text-transform:uppercase; letter-spacing:1px; transition:opacity .2s; }
+    button:hover { opacity:.85; }
     .err { color:var(--error); font-size:12px; margin-bottom:14px; display:none; }
   </style>
 </head>
@@ -563,19 +571,23 @@ const firstRunHTML = `<!DOCTYPE html>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>DAB Webserver — First Run</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:ital,wght@0,200;0,300;0,400;0,600;0,700;0,900;1,200;1,300;1,400;1,600;1,700&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    :root { --bg:#080e14; --surface:#0d1821; --border:#1a2d42; --accent:#00d2ff; --text:#c8dce8; --muted:#4a6478; --error:#ff5252; --success:#00e676; }
-    body { background:var(--bg); color:var(--text); font-family:'JetBrains Mono',monospace; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
-    .card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:32px; width:100%; max-width:400px; }
-    h1 { font-size:20px; font-weight:700; color:#fff; margin-bottom:6px; }
+    :root { --bg:rgb(32,34,40); --bright:rgb(88,219,171); --surface:color-mix(in srgb, rgb(32,34,40) 95%, rgb(88,219,171)); --surface2:color-mix(in srgb, rgb(32,34,40) 75%, rgb(88,219,171)); --border:color-mix(in srgb, color-mix(in srgb, rgb(32,34,40) 75%, rgb(88,219,171)), transparent 30%); --muted:color-mix(in srgb, rgb(32,34,40) 20%, rgb(88,219,171)); --accent:var(--bright); --text:#fff; --error:#ff5776; --success:#58dbab; }
+    body { background:var(--bg); color:var(--text); font-family:'Titillium Web',sans-serif; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:20px; }
+    .card { background:color-mix(in srgb, var(--surface), transparent 40%); backdrop-filter:blur(5px); border-radius:15px; padding:32px; width:100%; max-width:400px; }
+    h1 { font-size:24px; font-weight:600; color:#fff; margin-bottom:6px; letter-spacing:1px; }
     h1 span { color:var(--accent); }
-    .badge { display:inline-block; background:rgba(0,230,118,0.1); border:1px solid rgba(0,230,118,0.3); color:var(--success); border-radius:4px; padding:2px 8px; font-size:10px; letter-spacing:1px; margin-bottom:16px; }
-    p { color:var(--muted); font-size:12px; margin-bottom:24px; line-height:1.6; }
+    .badge { display:inline-block; background:rgba(88,219,171,0.12); border:1px solid rgba(88,219,171,0.3); color:var(--success); border-radius:4px; padding:2px 8px; font-size:10px; letter-spacing:1px; margin-bottom:16px; text-transform:uppercase; }
+    p { color:var(--muted); font-size:13px; margin-bottom:24px; line-height:1.6; }
     label { display:block; font-size:11px; color:var(--muted); margin-bottom:6px; text-transform:uppercase; letter-spacing:1px; }
-    input { width:100%; background:#111c27; border:1px solid var(--border); border-radius:6px; color:var(--text); font-family:'JetBrains Mono',monospace; font-size:13px; padding:10px 14px; outline:none; margin-bottom:16px; }
+    input { width:100%; background:color-mix(in srgb, var(--surface2), transparent 40%); border:1px solid var(--border); border-radius:8px; color:var(--text); font-family:'Roboto Mono',monospace; font-size:13px; padding:10px 14px; outline:none; margin-bottom:16px; }
     input:focus { border-color:var(--accent); }
-    button { width:100%; background:var(--accent); color:#080e14; border:none; border-radius:6px; padding:12px; font-size:13px; font-weight:700; cursor:pointer; text-transform:uppercase; letter-spacing:1px; }
+    button { width:100%; background:var(--accent); color:var(--bg); border:none; border-radius:8px; padding:12px; font-family:'Titillium Web',sans-serif; font-size:14px; font-weight:700; cursor:pointer; text-transform:uppercase; letter-spacing:1px; transition:opacity .2s; }
+    button:hover { opacity:.85; }
     .err { color:var(--error); font-size:12px; margin-bottom:14px; display:none; }
   </style>
 </head>

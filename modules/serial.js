@@ -13,6 +13,8 @@ let port = null
 let slideshowChunks = []
 let collectingBase64 = false
 let _awaitingTune = false   // tussen >>> TUNE=X en *TUNE=X — $L= in dit venster negeren
+let _awaitingTuneTimer = null
+let _pendingService = null  // service die geselecteerd wordt zodra $L= binnenkomt
 
 function getServiceType(id) {
   const svc = state.servicesList.find(s => s.id === String(id))
@@ -85,6 +87,7 @@ function initSerial() {
       if (bootMode === 'fm') {
         seq.push('DEBUG=1')
         seq.push(`DEEMPH=${ls.deemph || 50}`)
+        state.deemph = ls.deemph || 50
         const seekCfg = config.fm?.seek
         if (seekCfg?.rssiThreshold !== undefined) seq.push(`FMSEEKRSSI=${seekCfg.rssiThreshold}`)
         if (seekCfg?.snrThreshold  !== undefined) seq.push(`FMSEEKSNR=${seekCfg.snrThreshold}`)
@@ -92,6 +95,7 @@ function initSerial() {
       } else {
         seq.push('DEBUG=1')
         if (ls.dabTune !== null && ls.dabTune !== undefined) seq.push(`TUNE=${ls.dabTune}`)
+        if (ls.dabService !== null && ls.dabService !== undefined) _pendingService = String(ls.dabService)
       }
 
       let t = 0
@@ -265,6 +269,15 @@ function initSerial() {
       broadcast({ type: 'ensembleInfo', ensemble: state.ensemble, ensembleName: state.ensembleName, ecc: state.ecc })
       broadcast({ type: 'servicesList', data: state.servicesList })
 
+      // pending service-restore (mode-switch of boot): selecteer zodra de lijst er is
+      if (_pendingService !== null && state.servicesList.length) {
+        const svc = _pendingService
+        _pendingService = null
+        if (state.servicesList.some(s => s.id === svc)) {
+          setTimeout(() => port.write(`SERVICE=${svc}\n`), 400)
+        }
+      }
+
       const ch = parseInt(state.tune)
       if (!isNaN(ch)) {
         if (state.scanResults[ch] && state.ensemble &&
@@ -394,6 +407,13 @@ function initSerial() {
   return port
 }
 
-function setAwaitingTune(val) { _awaitingTune = val }
+function setAwaitingTune(val) {
+  _awaitingTune = val
+  if (_awaitingTuneTimer) { clearTimeout(_awaitingTuneTimer); _awaitingTuneTimer = null }
+  // safety: als *TUNE= ack verloren gaat (bv. tijdens image-reload), niet eeuwig $L= blokkeren
+  if (val) _awaitingTuneTimer = setTimeout(() => { _awaitingTune = false; _awaitingTuneTimer = null }, 5000)
+}
 
-module.exports = { initSerial, resetMuxState, resetFmState, setAwaitingTune }
+function setPendingService(id) { _pendingService = id == null ? null : String(id) }
+
+module.exports = { initSerial, resetMuxState, resetFmState, setAwaitingTune, setPendingService }

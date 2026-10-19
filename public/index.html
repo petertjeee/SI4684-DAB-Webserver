@@ -14,7 +14,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Titillium+Web:ital,wght@0,200;0,300;0,400;0,600;0,700;0,900;1,200;1,300;1,400;1,600;1,700&family=Roboto+Mono:wght@300;400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/style.css?v=7">
+  <link rel="stylesheet" href="/css/style.css?v=18">
 </head>
 <body>
 
@@ -51,7 +51,7 @@
   <!-- BAND SCAN - full width -->
   <div class="panel w-100 m-0">
     <div class="scan-head">
-      <h2 style="margin-bottom:0;">Band Scan</h2>
+      <h2 style="margin-bottom:0;" id="scanTitle">Band Scan</h2>
       <div class="scan-head-right">
         <span class="scan-status" id="scanStatus"></span>
         <button class="btn" id="scanBtn" onclick="toggleScan()">Scan</button>
@@ -154,7 +154,7 @@
     </div>
 
     <!-- FM: AF-LIJST -->
-    <div class="panel w-33 m-0 services-panel fm-only" style="display:none">
+    <div class="panel w-33 m-0 services-panel fm-only fm-af-panel" style="display:none">
       <h2>AF <span class="text-small" id="fmAfCount"></span></h2>
       <div id="fmAFList"></div>
     </div>
@@ -234,11 +234,15 @@
       <h2>Frequency</h2>
       <div class="tune-freq text-monospace" id="fmFreqBig" style="font-size:2.2em;">-<span>MHz</span></div>
       <div class="tune-controls fm-tune-controls">
-        <button class="btn" onclick="fmSeek('down')" id="fmSeekDn" title="Seek down">&#9664;</button>
-        <button class="btn" onclick="fmStep(-100)">-0.1</button>
-        <input type="text" class="freq-input" id="fmFreqInput" inputmode="decimal" onkeydown="if(event.key==='Enter')fmTuneInput()">
-        <button class="btn" onclick="fmStep(100)">+0.1</button>
-        <button class="btn" onclick="fmSeek('up')" id="fmSeekUp" title="Seek up">&#9654;</button>
+        <div class="fm-step-group">
+          <button class="btn" onclick="fmStep(-100)">&minus;</button>
+          <input type="text" class="freq-input" id="fmFreqInput" inputmode="decimal" onkeydown="if(event.key==='Enter')fmTuneInput()">
+          <button class="btn" onclick="fmStep(100)">+</button>
+        </div>
+        <div class="fm-seek-row">
+          <button class="btn fm-seek" onclick="fmSeek('down')" id="fmSeekDn">&#9664; Seek</button>
+          <button class="btn fm-seek" onclick="fmSeek('up')" id="fmSeekUp">Seek &#9654;</button>
+        </div>
       </div>
     </div>
     <div class="panel w-33 m-0">
@@ -251,7 +255,7 @@
           <div class="sig-value text-monospace" id="fmSnrVal">-</div>
         </div>
         <div class="sig-row">
-          <div class="sig-label">MULTIPATH</div>
+          <div class="sig-label">MULT</div>
           <div class="sig-bar-wrap"><div class="sig-bar-fill" id="fmMult"></div></div>
           <div class="sig-value text-monospace" id="fmMultVal">-</div>
         </div>
@@ -264,6 +268,14 @@
           <div class="sig-label">PILOT</div>
           <div class="sig-value text-monospace" id="fmPilotVal" style="text-align:left;">-</div>
         </div>
+        <div class="sig-row">
+          <div class="sig-label">DE-EMPH</div>
+          <select id="deemphSelect" class="deemph-select" onchange="setDeemph(this.value)">
+            <option value="50">50&micro;s EU</option>
+            <option value="75">75&micro;s US</option>
+            <option value="0">OFF</option>
+          </select>
+        </div>
       </div>
     </div>
     <div class="panel w-33 m-0">
@@ -275,6 +287,6 @@
 </div>
 
 <script src="/js/constants.js?v=7"></script>
-<script src="/js/main.js?v=7"></script>
+<script src="/js/main.js?v=18"></script>
 </body>
 </html>

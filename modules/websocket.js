@@ -155,9 +155,12 @@ function initWebSocket(server) {
         info(`setMode: ${mode} from (${ip})`)
         cancelPendingModeRestore()
         stopFmSeek('mode-switch', false)
+        const { stopScan } = require('./scanner')
+        stopScan()
         const ls = getLastState()
         if (mode === 'fm') {
           saveLastState({ dabTune: state.tune, dabService: state.service })
+          require('./serial').setPendingService(null)
           port.write('MODE=fm\n')
           const cfg = JSON.parse(fs.readFileSync('./config.json', 'utf8'))
           const seekCfg = cfg.fm?.seek
@@ -175,12 +178,16 @@ function initWebSocket(server) {
               pendingModeRestore = null
               setAwaitingTune(true)
               port.write(`TUNE=${ls.dabTune}\n`)
-            }, 500)
+              if (ls.dabService !== null && ls.dabService !== undefined) {
+                require('./serial').setPendingService(ls.dabService)
+              }
+            }, 2000)
           }
         }
         state.mode = mode
         saveLastState({ mode })
-        broadcast({ type: 'mode', data: mode })
+        const canRestore = mode === 'dab' ? ls.dabService != null : ls.fmFreq != null
+        broadcast({ type: 'mode', data: mode, restoreService: canRestore })
       }
 
       if (msg.type === 'setFmFreq') {
@@ -213,9 +220,11 @@ function initWebSocket(server) {
       if (msg.type === 'setDeemph') {
         if (state.mode !== 'fm') return
         const v = parseInt(msg.value)
-        if (v !== 50 && v !== 75) return
+        if (v !== 0 && v !== 50 && v !== 75) return
         port.write(`DEEMPH=${v}\n`)
+        state.deemph = v
         saveLastState({ deemph: v })
+        broadcast({ type: 'deemph', data: v })
       }
 
       if (msg.type === 'toggleEnable') {

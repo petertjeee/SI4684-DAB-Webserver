@@ -667,20 +667,39 @@ h2 {
 /* ===== FM TUNE CONTROLS ===== */
 .fm-tune-controls {
   display: flex;
-  gap: 6px;
+  flex-direction: column;
+  gap: 8px;
   align-items: center;
-  justify-content: center;
-  flex-wrap: wrap;
+  margin-top: 10px;
 }
 
-.fm-tune-controls .btn { padding: 0 12px; min-width: 40px; }
+.fm-seek-row {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.fm-seek-row .fm-seek { flex: 1; padding: 0 10px; }
+
+.fm-step-group {
+  display: flex;
+  align-items: stretch;
+}
+
+.fm-step-group .btn {
+  padding: 0 12px;
+  border-radius: 0;
+  font-size: 18px;
+}
+
+.fm-step-group .btn:first-child { border-radius: 15px 0 0 15px; }
+.fm-step-group .btn:last-child  { border-radius: 0 15px 15px 0; }
 
 .freq-input {
   height: 34px;
-  width: 84px;
-  padding: 0 10px;
+  width: 78px;
+  padding: 0 6px;
   border: 0;
-  border-radius: 15px;
   background-color: rgba(0,0,0,0.35);
   color: var(--color-4);
   font-family: 'Roboto Mono', monospace;
@@ -689,7 +708,22 @@ h2 {
   outline: none;
 }
 
-.freq-input:focus { box-shadow: 0 0 0 2px var(--color-main-bright); }
+.freq-input:focus { box-shadow: inset 0 0 0 2px var(--color-main-bright); }
+
+.deemph-select {
+  margin-left: auto;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--color-2);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-4);
+  font-family: 'Roboto Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.deemph-select option { background: var(--color-1); }
 
 /* ===== BAND SCAN ===== */
 .scan-head {
@@ -755,6 +789,13 @@ h2 {
 }
 
 #servicesScanList { overflow-y: auto; }
+
+/* FM AF-paneel: lijst absoluut zodat inhoud de rijhoogte niet bepaalt */
+.fm-af-panel { position: relative; overflow: hidden; }
+#fmAFList { position: absolute; top: 52px; left: 18px; right: 18px; bottom: 14px; overflow-y: auto; }
+
+/* FM: geen slideshow → geen gereserveerde ruimte rechts */
+.fm-mode .station-split { padding-right: 0; }
 
 .svc-scan-channel {
   margin-bottom: 8px;
@@ -833,6 +874,8 @@ h2 {
 
 /* ===== RESPONSIVE ===== */
 @media only screen and (max-width: 900px) {
+  .fm-af-panel { overflow: visible; }
+  #fmAFList { position: static; max-height: 300px; }
   .flex-row { flex-direction: column; }
   .w-33, .w-75 { flex: 1 1 100%; width: 100%; }
   .station-name { font-size: 30px; }
