@@ -630,6 +630,67 @@ h2 {
 
 .btn:hover { background-color: var(--color-main-bright); }
 
+.btn.active {
+  background-color: var(--color-main-bright);
+  box-shadow: 0 0 8px rgba(0,0,0,0.4);
+}
+
+/* ===== MODE SWITCH ===== */
+.mode-switch {
+  display: flex;
+  gap: 4px;
+  background-color: rgba(0,0,0,0.35);
+  border-radius: 15px;
+  padding: 3px;
+}
+
+.mode-btn {
+  height: 28px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--color-4);
+  font-family: 'Titillium Web', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: 0.2s ease;
+}
+
+.mode-btn.active {
+  background-color: var(--color-main-bright);
+  color: var(--color-main);
+}
+
+/* ===== FM TUNE CONTROLS ===== */
+.fm-tune-controls {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.fm-tune-controls .btn { padding: 0 12px; min-width: 40px; }
+
+.freq-input {
+  height: 34px;
+  width: 84px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 15px;
+  background-color: rgba(0,0,0,0.35);
+  color: var(--color-4);
+  font-family: 'Roboto Mono', monospace;
+  font-size: 16px;
+  text-align: center;
+  outline: none;
+}
+
+.freq-input:focus { box-shadow: 0 0 0 2px var(--color-main-bright); }
+
 /* ===== BAND SCAN ===== */
 .scan-head {
   display: flex;

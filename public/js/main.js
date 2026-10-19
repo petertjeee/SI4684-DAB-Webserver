@@ -533,6 +533,21 @@ function handleMessage(msg) {
         document.getElementById('scanStatus').textContent = msg.scanStatus
       }
       if (msg.slideshow) img.src = `data:${msg.slideshowMime};base64,` + msg.slideshow
+      // FM
+      if (msg.mode) applyMode(msg.mode)
+      if (msg.fmFreq) setFmFreq(msg.fmFreq)
+      if (msg.fmBandscan) { fmScan = msg.fmBandscan; drawFmScan() }
+      const FM_STATE_KEYS = { fmPI:'pi', fmPS:'ps', fmRT:'rt', fmAF:'af', fmTP:'tp', fmTA:'ta', fmMS:'ms', fmPTY:'pty', fmPTYN:'ptyn', fmECC:'ecc', fmDI:'di' }
+      Object.keys(FM_STATE_KEYS).forEach(sk => {
+        if (msg[sk] !== undefined && msg[sk] !== null) fmRds[FM_STATE_KEYS[sk]] = msg[sk]
+      })
+      if (radioMode === 'fm') {
+        updateFmStation()
+        renderFmRdsInfo()
+        renderFmAf()
+        if (fmRds.rt) setRadioText(fmRds.rt)
+        if (fmRds.af?.length) renderFmAf()
+      }
       break
 
     case 'servicesList':
@@ -697,6 +712,99 @@ function handleMessage(msg) {
       })
       break
 
+    // ===== FM =====
+    case 'mode':
+      applyMode(msg.data)
+      break
+
+    case 'fmSignal':
+      if (radioMode === 'fm') updateFmSignal(msg.data)
+      break
+
+    case 'fmFreq':
+      setFmFreq(msg.data)
+      break
+
+    case 'fmPI':
+      fmRds.pi = msg.data
+      updateFmStation()
+      renderFmRdsInfo()
+      break
+
+    case 'fmPS':
+      fmRds.ps = msg.data
+      updateFmStation()
+      renderFmRdsInfo()
+      break
+
+    case 'fmRT':
+      fmRds.rt = msg.data
+      if (radioMode === 'fm' && msg.data) setRadioText(msg.data)
+      break
+
+    case 'fmPTY':
+      fmRds.pty = msg.data
+      renderFmRdsInfo()
+      break
+
+    case 'fmPTYN':
+      fmRds.ptyn = msg.data
+      renderFmRdsInfo()
+      break
+
+    case 'fmECC':
+      fmRds.ecc = msg.data
+      renderFmRdsInfo()
+      break
+
+    case 'fmTP':
+      fmRds.tp = msg.data
+      renderFmRdsInfo()
+      break
+
+    case 'fmTA':
+      fmRds.ta = msg.data
+      renderFmRdsInfo()
+      break
+
+    case 'fmMS':
+      fmRds.ms = msg.data
+      renderFmRdsInfo()
+      break
+
+    case 'fmDI':
+      fmRds.di = msg.data
+      renderFmRdsInfo()
+      break
+
+    case 'fmAF':
+      fmRds.af = msg.data
+      renderFmAf()
+      break
+
+    case 'fmSeekStatus':
+      const seeking = !!msg.active
+      document.getElementById('fmSeekUp').classList.toggle('active', seeking && msg.direction > 0)
+      document.getElementById('fmSeekDn').classList.toggle('active', seeking && msg.direction < 0)
+      break
+
+    case 'fmBandscan':
+      fmScan = msg.data
+      drawFmScan()
+      document.getElementById('scanStatus').textContent = `FM band \u00b7 ${msg.data.rssi.length} points`
+      break
+
+    case 'fmBandscanPoint':
+      if (fmScan && fmScan.rssi && msg.idx >= 0 && msg.idx < fmScan.rssi.length) {
+        fmScan.rssi[msg.idx] = msg.rssi
+        drawFmScan()
+      }
+      break
+
+    case 'fmRdsClear':
+      fmRdsClearFields()
+      break
+
     case 'connectionCount':
       const el = document.getElementById('connectionCount')
       if (el) el.textContent = msg.count + (msg.count === 1 ? ' User Online' : ' Users Online')
@@ -846,13 +954,19 @@ const scanCtx = scanCanvas.getContext('2d')
 function resizeScanCanvas() {
   scanCanvas.width = scanCanvas.offsetWidth
   scanCanvas.height = 80
-  if (scanResults.length > 0) drawScanChart(scanResults)
+  if (radioMode === 'fm') drawFmScan()
+  else if (scanResults.length > 0) drawScanChart(scanResults)
 }
 
 resizeScanCanvas()
 window.addEventListener('resize', resizeScanCanvas)
 
 function toggleScan() {
+  if (radioMode === 'fm') {
+    document.getElementById('scanStatus').textContent = 'Scanning FM band...'
+    wsSend({ type: 'fmBandscan' })
+    return
+  }
   if (scanRunning) {
     wsSend({ type: 'stopScan' })
     scanRunning = false
@@ -914,10 +1028,17 @@ function updateScanChannels(results) {
 }
 
 scanCanvas.addEventListener('click', e => {
-  if (scanResults.length === 0) return
   const rect = scanCanvas.getBoundingClientRect()
   const xCSS = e.clientX - rect.left
   const W = scanCanvas.width
+  if (radioMode === 'fm') {
+    if (!fmScan || !fmScan.rssi) return
+    const frac = xCSS / rect.width
+    const freq = Math.round(fmScan.start + frac * (fmScan.stop - fmScan.start))
+    if (freq >= 87500 && freq <= 108000) wsSend({ type: 'setFmFreq', freq })
+    return
+  }
+  if (scanResults.length === 0) return
   const barW = Math.floor(W / 38) - 1.40
   const ch = Math.floor(xCSS * (W / rect.width) / (barW + 2))
   if (ch < 0 || ch > 37) return
@@ -937,6 +1058,189 @@ scanCanvas.addEventListener('click', e => {
 
 // redraw labels once webfonts are loaded (canvas uses Roboto Mono)
 if (document.fonts?.ready) document.fonts.ready.then(() => drawScanChart(scanResults))
+
+// ===== FM MODE =====
+let radioMode = 'dab'
+let fmFreqKhz = null
+let fmScan = null
+const fmRds = { pi: null, ps: null, rt: null, af: [], tp: null, ta: null, ms: null, pty: null, ptyn: null, ecc: null, di: null }
+
+function setRadioMode(mode) {
+  if (mode === radioMode) return
+  wsSend({ type: 'setMode', mode })
+}
+
+function applyMode(mode) {
+  radioMode = mode
+  document.querySelectorAll('.dab-only').forEach(e => { e.style.display = mode === 'fm' ? 'none' : '' })
+  document.querySelectorAll('.fm-only').forEach(e => { e.style.display = mode === 'fm' ? '' : 'none' })
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode))
+  document.getElementById('tunerName').innerHTML = mode === 'fm'
+    ? 'Si4684 <span class="color-bright">FM</span>'
+    : 'Si4684 <span class="color-bright">DAB+</span>'
+  const st = document.getElementById('scanStatus')
+  if (mode === 'fm') {
+    st.textContent = fmScan ? 'FM band' : ''
+    drawFmScan()
+  } else {
+    st.textContent = ''
+    drawScanChart(scanResults)
+  }
+}
+
+function fmMhz(khz) { return (khz / 1000).toFixed(1) }
+
+function setFmFreq(khz) {
+  fmFreqKhz = khz
+  const mhz = fmMhz(khz)
+  document.getElementById('fmFreqBig').innerHTML = mhz + '<span>MHz</span>'
+  document.getElementById('headerTune').textContent = mhz + ' MHz'
+  const inp = document.getElementById('fmFreqInput')
+  if (document.activeElement !== inp) inp.value = mhz
+  updateFmStation()
+}
+
+function fmStep(deltaKhz) {
+  const base = fmFreqKhz || parseFloat(document.getElementById('fmFreqInput').value) * 1000 || 100000
+  const f = Math.round(Math.max(87500, Math.min(108000, base + deltaKhz)))
+  wsSend({ type: 'setFmFreq', freq: f })
+}
+
+function fmTuneInput() {
+  const v = parseFloat(document.getElementById('fmFreqInput').value.replace(',', '.'))
+  if (isNaN(v)) return
+  const khz = v > 1000 ? Math.round(v) : Math.round(v * 1000)
+  if (khz < 87500 || khz > 108000) return
+  wsSend({ type: 'setFmFreq', freq: khz })
+}
+
+function fmSeek(dir) {
+  wsSend({ type: 'fmSeek', direction: dir })
+}
+
+function updateFmSignal(data) {
+  const sig = parseFloat(data.SIGNAL)
+  if (!isNaN(sig)) {
+    signalHistory.push(sig)
+    if (signalHistory.length > MAX_POINTS * 2) signalHistory.splice(0, MAX_POINTS)
+    document.getElementById('fmSignalBig').innerHTML = sig.toFixed(1) + '<span class="text-medium">dB&#181;V</span>'
+    const g = document.getElementById('signalGraphVal')
+    if (g) g.textContent = sig.toFixed(1) + ' dB\u00b5V'
+  }
+  const snr = parseFloat(data.SNR)
+  if (!isNaN(snr)) {
+    setBar('fmSnr', normalize(snr, 0, 40))
+    document.getElementById('fmSnrVal').textContent = snr.toFixed(0) + ' dB'
+  }
+  if (data.MULT !== undefined) {
+    setBar('fmMult', normalize(parseFloat(data.MULT), 0, 100))
+    document.getElementById('fmMultVal').textContent = data.MULT + ' %'
+  }
+  if (data.BLEND !== undefined) {
+    setBar('fmBlend', normalize(parseFloat(data.BLEND), 0, 100))
+    document.getElementById('fmBlendVal').textContent = data.BLEND + ' %'
+  }
+  if (data.PILOT !== undefined) {
+    const stereo = data.PILOT === '1'
+    document.getElementById('fmPilotVal').textContent = stereo ? 'Detected' : '-'
+    document.getElementById('fmStereoDot').classList.toggle('locked', stereo)
+    document.getElementById('fmStereoLabel').textContent = stereo ? 'Stereo' : 'Mono'
+    document.getElementById('pcAudioType').textContent = stereo ? 'FM STEREO' : 'FM MONO'
+  }
+}
+
+function updateFmStation() {
+  const ps = fmRds.ps && fmRds.ps.trim()
+  document.getElementById('pcStationTitle').textContent = ps || (fmFreqKhz ? fmMhz(fmFreqKhz) + ' MHz' : '-')
+  document.getElementById('pcEnsembleName').textContent = fmFreqKhz ? fmMhz(fmFreqKhz) + ' MHz' : '-'
+  document.getElementById('headerEnsemble').textContent = ps || 'FM'
+  document.getElementById('fmPS').textContent = ps || '-'
+  document.getElementById('fmPI').textContent = fmRds.pi ? 'PI ' + fmRds.pi : '-'
+}
+
+const RDS_INFO_LABELS = { pi: 'PI', pty: 'PTY', ptyn: 'PTYN', tp: 'TP', ta: 'TA', ms: 'M/S', ecc: 'ECC', di: 'DI' }
+
+function renderFmRdsInfo() {
+  const rows = []
+  const fmt = (k, v) => {
+    if (v === null || v === undefined || v === '') return
+    let d = v
+    if (k === 'pty') d = getPtyLabel(v)
+    if (k === 'ms')  d = v === 1 ? 'Music' : 'Speech'
+    if (k === 'tp' || k === 'ta') d = v ? 'On' : 'Off'
+    if (k === 'di')  d = typeof v === 'object' ? JSON.stringify(v) : v
+    rows.push(`<div class="svc-info-row"><div class="svc-info-label">${RDS_INFO_LABELS[k]}</div><div class="svc-info-value">${d}</div></div>`)
+  }
+  fmt('pi', fmRds.pi); fmt('pty', fmRds.pty); fmt('ptyn', fmRds.ptyn)
+  fmt('tp', fmRds.tp); fmt('ta', fmRds.ta); fmt('ms', fmRds.ms)
+  fmt('ecc', fmRds.ecc); fmt('di', fmRds.di)
+  document.getElementById('fmRdsInfo').innerHTML = rows.join('')
+  const meta = []
+  if (fmRds.pty !== null && fmRds.pty !== undefined) meta.push(getPtyLabel(fmRds.pty))
+  if (fmRds.ecc) meta.push('ECC ' + fmRds.ecc)
+  document.getElementById('fmRdsMeta').textContent = meta.join(' \u00b7 ')
+}
+
+function renderFmAf() {
+  const el = document.getElementById('fmAFList')
+  const list = Array.isArray(fmRds.af) ? fmRds.af : []
+  document.getElementById('fmAfCount').textContent = list.length ? `(${list.length})` : ''
+  if (!list.length) { el.innerHTML = '<div style="font-size:10px; color:var(--text-dim); text-align:center; padding:20px 0;">No AF received</div>'; return }
+  el.innerHTML = ''
+  list.forEach(f => {
+    const item = document.createElement('div')
+    item.className = 'svc-scan-item'
+    const khz = f > 1000 ? f : Math.round(f * 1000)
+    const mhz = fmMhz(khz)
+    item.innerHTML = `${mhz} MHz${fmFreqKhz === khz ? ' <span class="svc-type">now</span>' : ''}`
+    item.onclick = () => wsSend({ type: 'setFmFreq', freq: khz })
+    el.appendChild(item)
+  })
+}
+
+function fmRdsClearFields() {
+  Object.keys(fmRds).forEach(k => { fmRds[k] = Array.isArray(fmRds[k]) ? [] : null })
+  document.getElementById('pcRtText').textContent = 'No data'
+  updateFmStation()
+  renderFmRdsInfo()
+  renderFmAf()
+}
+
+function drawFmScan() {
+  if (!fmScan || !fmScan.rssi || !fmScan.rssi.length) {
+    scanCtx.clearRect(0, 0, scanCanvas.width, scanCanvas.height)
+    return
+  }
+  const W = scanCanvas.width, H = scanCanvas.height
+  scanCtx.clearRect(0, 0, W, H)
+  const n = fmScan.rssi.length
+  const barW = W / n
+  const maxSig = 80
+  for (let i = 0; i < n; i++) {
+    const sig = Math.max(0, fmScan.rssi[i] || 0)
+    const h = Math.max(2, (sig / maxSig) * (H - 16))
+    const x = i * barW, y = H - h
+    const color = sig < 10 ? '#2e6e57' : sig < 20 ? '#58dbab' : '#baffdf'
+    const grad = scanCtx.createLinearGradient(0, y, 0, H)
+    grad.addColorStop(0, color)
+    grad.addColorStop(1, color + '44')
+    scanCtx.fillStyle = grad
+    scanCtx.fillRect(x, y, Math.max(1, barW - 1), h)
+  }
+  scanCtx.fillStyle = '#ffffff'
+  scanCtx.font = '11px "Roboto Mono", monospace'
+  scanCtx.textAlign = 'center'
+  const lo = fmScan.start / 1000, hi = fmScan.stop / 1000
+  scanCtx.textAlign = 'left'
+  scanCtx.fillText(lo.toFixed(1), 4, 12)
+  scanCtx.textAlign = 'right'
+  scanCtx.fillText(hi.toFixed(1), W - 4, 12)
+  if (fmFreqKhz >= fmScan.start && fmFreqKhz <= fmScan.stop) {
+    const x = (fmFreqKhz - fmScan.start) / (fmScan.stop - fmScan.start) * W
+    scanCtx.strokeStyle = '#e53935'
+    scanCtx.beginPath(); scanCtx.moveTo(x, 0); scanCtx.lineTo(x, H); scanCtx.stroke()
+  }
+}
 
 // ===== SERVICES SCAN LIST =====
 function renderServicesScanList(results) {

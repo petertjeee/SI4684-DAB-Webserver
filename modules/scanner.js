@@ -13,6 +13,20 @@ function stopScan() {
   scanning = false
 }
 
+// Live-update van het RSSI-punt op de huidige FM-frequentie in de bandscan
+function updateBandscanPoint(rssi) {
+  const bs = state.fmBandscan
+  if (!bs || !Array.isArray(bs.rssi) || !state.fmFreq || !isFinite(rssi)) return
+  if (state.fmSeeking) return
+  if (Date.now() - (state.fmFreqTs || 0) < 1500) return
+  const idx = (state.fmFreq - bs.start) / bs.step
+  if (!Number.isInteger(idx) || idx < 0 || idx >= bs.rssi.length) return
+  const val = Math.round(rssi)
+  if (bs.rssi[idx] === val) return
+  bs.rssi[idx] = val
+  broadcast({ type: 'fmBandscanPoint', idx, rssi: val })
+}
+
 function sleepMs(ms) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
@@ -29,6 +43,10 @@ function waitForLock(maxMs) {
 }
 
 async function startScan(ws) {
+  if (state.mode !== 'dab') {
+    if (ws) ws.send(JSON.stringify({ type: 'scanError', data: 'DAB scan only in DAB mode' }))
+    return
+  }
   if (scanning) {
     if (ws) ws.send(JSON.stringify({ type: 'scanError', data: 'Scan already in progress' }))
     return
@@ -115,4 +133,4 @@ async function startScan(ws) {
   broadcast({ type: 'scanComplete', data: compact })
 }
 
-module.exports = { startScan, stopScan, setSerialPort }
+module.exports = { startScan, stopScan, setSerialPort, updateBandscanPoint }

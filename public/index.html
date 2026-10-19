@@ -24,6 +24,11 @@
   <div class="topbar">
     <h1 id="tunerName">Si4684 <span class="color-bright">DAB+</span></h1>
     <div class="topbar-status">
+      <div class="mode-switch" id="modeSwitch">
+        <button class="mode-btn active" data-mode="dab" onclick="setRadioMode('dab')">DAB</button>
+        <button class="mode-btn" data-mode="fm" onclick="setRadioMode('fm')">FM</button>
+      </div>
+      <span class="topbar-sep"></span>
       <span id="headerEnsemble" class="text-small">-</span>
       <span class="topbar-sep"></span>
       <span id="headerTune" class="text-small text-monospace">-</span>
@@ -89,12 +94,12 @@
             <span class="vol-value text-monospace" id="pcVolValue">100</span>
           </div>
         </div>
-        <img id="slideshow" src="" alt="" onclick="expandSlideshow()">
+        <img id="slideshow" class="dab-only" src="" alt="" onclick="expandSlideshow()">
           </div>
           <div class="rt-box">
             <h2 style="margin-top:0;">Radiotext</h2>
             <div class="rt-text" id="pcRtText">No data</div>
-            <div id="dlPlusBox" style="margin-top:10px; border-top:1px solid var(--color-2); padding-top:8px;">
+            <div id="dlPlusBox" class="dab-only" style="margin-top:10px; border-top:1px solid var(--color-2); padding-top:8px;">
               <h2 style="margin-top:0;">DL+</h2>
               <div class="rt-text" id="dlPlusText"></div>
             </div>
@@ -143,14 +148,20 @@
     </div>
 
     <!-- SERVICES -->
-    <div class="panel w-33 m-0 services-panel">
+    <div class="panel w-33 m-0 services-panel dab-only">
       <h2>Services</h2>
       <div id="servicesScanList"></div>
+    </div>
+
+    <!-- FM: AF-LIJST -->
+    <div class="panel w-33 m-0 services-panel fm-only" style="display:none">
+      <h2>AF <span class="text-small" id="fmAfCount"></span></h2>
+      <div id="fmAFList"></div>
     </div>
   </div>
 
   <!-- ROW: ENSEMBLE / FREQUENCY / SIGNAL -->
-  <div class="flex-row">
+  <div class="flex-row dab-only">
     <div class="panel w-33 m-0">
       <h2>Ensemble</h2>
       <div class="ensemble-name" id="ensemble">-</div>
@@ -204,6 +215,60 @@
     <div class="panel w-33 m-0">
       <h2>Service Info</h2>
       <div id="serviceInfo" class="svc-info-grid"></div>
+    </div>
+  </div>
+
+  <!-- ROW (FM): RDS / FREQUENCY / SIGNAL / INFO -->
+  <div class="flex-row fm-only" style="display:none">
+    <div class="panel w-33 m-0">
+      <h2>RDS</h2>
+      <div class="ensemble-name" id="fmPS">-</div>
+      <div class="ensemble-id text-monospace" id="fmPI">-</div>
+      <div class="lock-indicator" style="margin-top:10px;">
+        <div class="lock-dot" id="fmStereoDot"></div>
+        <span class="lock-label" id="fmStereoLabel">Mono</span>
+      </div>
+      <div class="flags-meta text-small" id="fmRdsMeta"></div>
+    </div>
+    <div class="panel w-33 m-0">
+      <h2>Frequency</h2>
+      <div class="tune-freq text-monospace" id="fmFreqBig" style="font-size:2.2em;">-<span>MHz</span></div>
+      <div class="tune-controls fm-tune-controls">
+        <button class="btn" onclick="fmSeek('down')" id="fmSeekDn" title="Seek down">&#9664;</button>
+        <button class="btn" onclick="fmStep(-100)">-0.1</button>
+        <input type="text" class="freq-input" id="fmFreqInput" inputmode="decimal" onkeydown="if(event.key==='Enter')fmTuneInput()">
+        <button class="btn" onclick="fmStep(100)">+0.1</button>
+        <button class="btn" onclick="fmSeek('up')" id="fmSeekUp" title="Seek up">&#9654;</button>
+      </div>
+    </div>
+    <div class="panel w-33 m-0">
+      <h2>Signal</h2>
+      <div class="text-big text-monospace" id="fmSignalBig">-<span class="text-medium">dB&#181;V</span></div>
+      <div class="signal-section">
+        <div class="sig-row">
+          <div class="sig-label">SNR</div>
+          <div class="sig-bar-wrap"><div class="sig-bar-fill" id="fmSnr"></div></div>
+          <div class="sig-value text-monospace" id="fmSnrVal">-</div>
+        </div>
+        <div class="sig-row">
+          <div class="sig-label">MULTIPATH</div>
+          <div class="sig-bar-wrap"><div class="sig-bar-fill" id="fmMult"></div></div>
+          <div class="sig-value text-monospace" id="fmMultVal">-</div>
+        </div>
+        <div class="sig-row">
+          <div class="sig-label">BLEND</div>
+          <div class="sig-bar-wrap"><div class="sig-bar-fill" id="fmBlend"></div></div>
+          <div class="sig-value text-monospace" id="fmBlendVal">-</div>
+        </div>
+        <div class="sig-row">
+          <div class="sig-label">PILOT</div>
+          <div class="sig-value text-monospace" id="fmPilotVal" style="text-align:left;">-</div>
+        </div>
+      </div>
+    </div>
+    <div class="panel w-33 m-0">
+      <h2>RDS Info</h2>
+      <div id="fmRdsInfo" class="svc-info-grid"></div>
     </div>
   </div>
 

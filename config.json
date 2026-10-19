@@ -10,12 +10,32 @@
     "bitrate": "128k"
   },
   "server": {
-    "port": 3000
+    "port": 3210
   },
   "scan": {
     "autoScanOnStart": true
   },
+  "dab": {
+    "enabled": true
+  },
+  "fm": {
+    "enabled": true,
+    "seek": {
+      "rssiThreshold": 5,
+      "snrThreshold": 3
+    }
+  },
+  "rds": {
+    "region": "rds"
+  },
+  "lastState": {
+    "mode": "dab",
+    "dabTune": null,
+    "dabService": null,
+    "fmFreq": 100700,
+    "deemph": 50
+  },
   "auth": {
-    "password": ""
+    "password": "preview"
   }
 }

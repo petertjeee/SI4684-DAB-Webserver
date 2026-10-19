@@ -5,11 +5,14 @@ const config = require('../config.json')
 const { state, DAB_CHANNELS, AUDIO_MODES, getScanResultsCompact } = require('./state')
 const { broadcast, setSerialPort: setWsPort } = require('./websocket')
 const { setSerialPort: setScannerPort } = require('./scanner')
+const { initRds, rdsParseString, rdsClear } = require('./rds')
+const { getLastState, saveLastState } = require('./laststate')
 const { info, warn, error } = require('./logger')
 
 let port = null
 let slideshowChunks = []
 let collectingBase64 = false
+let _awaitingTune = false   // tussen >>> TUNE=X en *TUNE=X — $L= in dit venster negeren
 
 function getServiceType(id) {
   const svc = state.servicesList.find(s => s.id === String(id))
@@ -34,6 +37,14 @@ function resetMuxState() {
   broadcast({ type: 'image', data: fs.readFileSync('./public/images/default.jpg').toString('base64') })
 }
 
+function resetFmState() {
+  state.fmPI = null
+  state.fmPS = null
+  state.fmRT = null
+  state.fmAF = []
+  rdsClear()
+}
+
 function initSerial() {
   if (!config.serial.port) {
     warn('Serial port not configured, skipping. Use /setup to configure.')
@@ -47,6 +58,8 @@ function initSerial() {
   setScannerPort(port)
   setWsPort(port)
 
+  initRds()
+
   const parser = port.pipe(new ReadlineParser({ delimiter: '\n' }))
 
   port.on('open', () => {
@@ -54,14 +67,46 @@ function initSerial() {
     port.write('ENABLE=0\n')
     setTimeout(() => {
       port.write('ENABLE=1\n')
-      port.write('DEBUG=1\n')
       state.enabled = true
-      info('SI4686 DAB Receiver enabled')
-      if (config.scan?.autoScanOnStart) {
+      info('SI468X Receiver enabled')
+
+      // Boot-sequentie uit lastState: MODE eerst (firmware-upload ~1s),
+      // dan de rest op 200ms afstand, TUNE met extra pauze.
+      const ls = getLastState()
+      const dabOn = config.dab?.enabled !== false
+      const fmOn  = config.fm?.enabled !== false
+      let bootMode = ls.mode === 'fm' ? 'fm' : 'dab'
+      if (!dabOn && !fmOn) bootMode = 'dab'
+      else if (bootMode === 'fm' && !fmOn) bootMode = 'dab'
+      else if (bootMode === 'dab' && !dabOn) bootMode = 'fm'
+      state.mode = bootMode
+
+      const seq = [`MODE=${bootMode}`]
+      if (bootMode === 'fm') {
+        seq.push('DEBUG=1')
+        seq.push(`DEEMPH=${ls.deemph || 50}`)
+        const seekCfg = config.fm?.seek
+        if (seekCfg?.rssiThreshold !== undefined) seq.push(`FMSEEKRSSI=${seekCfg.rssiThreshold}`)
+        if (seekCfg?.snrThreshold  !== undefined) seq.push(`FMSEEKSNR=${seekCfg.snrThreshold}`)
+        if (ls.fmFreq) seq.push(`TUNE=${ls.fmFreq}`)
+      } else {
+        seq.push('DEBUG=1')
+        if (ls.dabTune !== null && ls.dabTune !== undefined) seq.push(`TUNE=${ls.dabTune}`)
+      }
+
+      let t = 0
+      seq.forEach((cmd, i) => {
+        if (i === 0) t = 0
+        else if (cmd.startsWith('TUNE=')) t += 1200
+        else t += 200
+        setTimeout(() => port.write(cmd + '\n'), t)
+      })
+
+      if (config.scan?.autoScanOnStart && bootMode === 'dab') {
         setTimeout(() => {
           const { startScan } = require('./scanner')
           startScan(null)
-        }, 3000)
+        }, t + 3000)
       }
     }, 300)
   })
@@ -113,6 +158,7 @@ function initSerial() {
     if (line.startsWith('*SERVICE=')) {
       state.service     = line.slice(9).trim()
       state.serviceType = getServiceType(state.service)
+      saveLastState({ dabService: state.service })
       state.slideshow   = null
       state.dlPlus      = {}
       state.dynamicLabel = null
@@ -121,19 +167,73 @@ function initSerial() {
       return
     }
 
+    if (line.startsWith('*MODE=')) {
+      const mode = line.slice(6).trim().toLowerCase()
+      state.mode = mode
+      if (mode === 'fm') resetFmState()
+      saveLastState({ mode })
+      broadcast({ type: 'mode', data: mode })
+      return
+    }
+
+    if (line.startsWith('*BANDSCAN=')) {
+      const body = line.slice(10)
+      const ci = body.indexOf(':')
+      if (ci > 0) {
+        const head = body.slice(0, ci).split(',').map(Number)
+        const rssi = body.slice(ci + 1).split(',').map(Number)
+        if (head.length === 3 && rssi.length > 1) {
+          state.fmBandscan = { start: head[0], stop: head[1], step: head[2], rssi, ts: Date.now() }
+          broadcast({ type: 'fmBandscan', data: state.fmBandscan })
+          info(`FM bandscan: ${rssi.length} points (${head[0]}-${head[1]} kHz)`)
+        }
+      }
+      return
+    }
+
+    if (line.startsWith('*SEEKFAIL=')) {
+      broadcast({ type: 'fmSeekStatus', active: false, reason: 'no-station', freq: state.fmFreq || null })
+      const { stopFmSeek } = require('./websocket')
+      if (typeof stopFmSeek === 'function') stopFmSeek('no-station', false)
+      return
+    }
+
+    if (line.startsWith('$P=')) {
+      // PI komt separaat — RDS-decoder haalt hem uit $R=
+      return
+    }
+
+    if (line.startsWith('$R=')) {
+      rdsParseString(line.slice(3).trim())
+      return
+    }
+
     if (line.startsWith('*TUNE=')) {
       const newTune = line.slice(6).trim()
-      if (state.tune !== newTune) {
-        state.tune = newTune
-        resetMuxState()
+      _awaitingTune = false
+      if (state.mode === 'fm') {
+        state.fmFreq = parseInt(newTune)
+        state.fmFreqTs = Date.now()
+        rdsClear()
+        broadcast({ type: 'fmFreq', data: state.fmFreq })
+        broadcast({ type: 'fmRdsClear' })
+        const { stopFmSeek } = require('./websocket')
+        if (typeof stopFmSeek === 'function') stopFmSeek('done', true)
+      } else {
+        if (state.tune !== newTune) {
+          state.tune = newTune
+          resetMuxState()
+        }
+        saveLastState({ dabTune: state.tune })
+        broadcast({ type: 'tune', data: state.tune })
       }
-      broadcast({ type: 'tune', data: state.tune })
       return
     }
 
     if (line.startsWith('$M=')) return
 
     if (line.startsWith('$L=')) {
+      if (_awaitingTune) return   // verouderde mux-lijst tussen TUNE en ack — negeren
       const content = line.slice(3)
       const [headerPart, servicesPartRaw] = content.split(';SERVICES=')
       const headerParts = headerPart.split(',')
@@ -229,6 +329,17 @@ function initSerial() {
         if (idx === -1) return
         obj[p.slice(0, idx).trim()] = p.slice(idx + 1).trim()
       })
+      if (state.mode === 'fm') {
+        if (obj.SIGNAL !== undefined) state.fmSignal = obj.SIGNAL
+        if (obj.SNR    !== undefined) state.fmSNR    = obj.SNR
+        if (obj.PILOT  !== undefined) state.fmPilot  = obj.PILOT === '1'
+        if (obj.BLEND  !== undefined) state.fmBlend  = parseInt(obj.BLEND)
+        if (obj.MULT   !== undefined) state.fmMult   = parseInt(obj.MULT)
+        broadcast({ type: 'fmSignal', data: obj })
+        const { updateBandscanPoint } = require('./scanner')
+        if (updateBandscanPoint) updateBandscanPoint(parseFloat(obj.SIGNAL))
+        return
+      }
       state.signal = obj
       broadcast({ type: 'signal', data: obj })
 
@@ -283,4 +394,6 @@ function initSerial() {
   return port
 }
 
-module.exports = { initSerial, resetMuxState }
+function setAwaitingTune(val) { _awaitingTune = val }
+
+module.exports = { initSerial, resetMuxState, resetFmState, setAwaitingTune }

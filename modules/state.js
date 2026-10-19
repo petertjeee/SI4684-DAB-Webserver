@@ -23,6 +23,7 @@ const DAB_CHANNELS = [
 const AUDIO_MODES = ['4', '5']
 
 const state = {
+  mode:         'dab',
   service:      null,
   serviceType:  null,
   tune:         null,
@@ -41,6 +42,28 @@ const state = {
   scanResults:  new Array(38).fill(null),
   scanning:     false,
   scanStatus:   null,
+  // ── FM ──
+  fmFreq:      null,
+  fmFreqTs:    0,
+  fmSignal:    null,
+  fmSNR:       null,
+  fmPilot:     false,
+  fmBlend:     null,
+  fmMult:      null,
+  fmSeeking:   false,
+  fmBandscan:  null,
+  fmPI:        null,
+  fmPS:        null,
+  fmRT:        null,
+  fmAF:        [],
+  fmTP:        null,
+  fmTA:        false,
+  fmMS:        null,
+  fmPTY:       null,
+  fmPTYN:      null,
+  fmECC:       null,
+  fmRTPlus:    null,
+  fmDI:        null,
   _cachedServicesList: null
 }
 
